@@ -1,0 +1,208 @@
+/**
+ * Created by ABHISHEK KUMAR SHARM on 03-02-2020.
+ */
+
+global class BulkSyncUp_Batch_WithManualOverride implements Database.Batchable<sObject>, Database.AllowsCallouts, Database.Stateful {
+
+    global Boolean isInsertContact;
+    global List<Account> accounts;
+
+    global BulkSyncUp_Batch_WithManualOverride(Boolean isContact1) {
+        this.isInsertContact = isContact1;
+        accounts = new List<Account>();
+    }
+
+    global Database.QueryLocator start(Database.BatchableContext BC) {
+        string query = 'Select Name,Tracxn_Sync__Bulk_Sync_isSuccess__c,Tracxn_Sync__Manual_Override_Value__c,id,Website, Tracxn_Sync__Tracxn_Company_Domain__c, Tracxn_Sync__Tracxn_PublicID__c,';
+        query += 'Tracxn_Sync__Tracxn_Founded_Year__c, Tracxn_Sync__Tracxn_Facebook_Page__c, Tracxn_Sync__Tracxn_Twitter_Handle__c, Tracxn_Sync__Tracxn_Stage__c, Tracxn_Sync__Tracxn_State__c,';
+        query += 'Tracxn_Sync__Tracxn_Latest_Funding_investorList__c, Tracxn_Sync__Tracxn_Country__c, Tracxn_Sync__Tracxn_Company_Name__c,';
+        query += '(SELECT Id,Name,FirstName,LastName,Email,AccountId, Tracxn_Sync__Traxcn_Email_ID__c, Tracxn_Sync__Traxcn_Name__c FROM Contacts)';
+        query += ' From Account WHERE Tracxn_Sync__Manual_Override_Value__c != null';
+        return Database.getQueryLocator(query);
+    }
+
+    global void execute(Database.BatchableContext BC, List<Account> scope) {
+        Map<String, Contact> contactEmailMap = new Map<String, contact>();
+        Map<String, Contact> contactNameMap = new Map<String, contact>();
+        Map<String, List<Account>> domainAccountMap = new Map<String, List<Account>>();
+        Map<Id,Account> accDataMap = new Map<Id,Account>();
+        for (Account acc : scope) {
+            accDataMap.put(acc.Id,acc);
+            if (String.isNotBlank(acc.Tracxn_Sync__Manual_Override_Value__c)) {
+                List<Account> tempList = new List<Account>();
+                if (domainAccountMap.containsKey(acc.Tracxn_Sync__Manual_Override_Value__c)) {
+                    tempList = domainAccountMap.get(acc.Tracxn_Sync__Manual_Override_Value__c);
+                }
+                tempList.add(acc);
+                domainAccountMap.put(acc.Tracxn_Sync__Manual_Override_Value__c, tempList);
+            }
+
+            if (acc.Contacts.size() > 0) {
+                for (Contact con : acc.Contacts) {
+                    if (con.Email != null && con.AccountId != null) {
+                        contactEmailMap.put(con.Email.toLowerCase() + '-' + con.AccountId, con);
+                    }
+                    if (con.Name != null && con.AccountId != null) {
+                        contactNameMap.put(con.Name.toLowerCase() + '-' + con.AccountId, con);
+                    }
+                }
+            }
+        }
+
+        string webdomain = '[';
+        for (String S : domainAccountMap.keySet()) {
+            webdomain += '"' + s + '",';
+        }
+        webdomain = webdomain.removeEnd(',');
+        webdomain += ']'; // 2fD8ec0Lu1JQk3NjyG7l4fkRkR6bZhOis0oJ_gRDa7Y swiggy iPOgfVgYtYmen5ipJMy6Q5jV_PojSJWUFAFu9zmfTnA uber
+        String body = '{"filter":{"id":';
+        body = body + webdomain;
+        body = body + '}}';
+        Tracxn_Sync__Accounts_API__c accApi = [select id, Tracxn_Sync__end_point_url__c, Tracxn_Sync__acess_token__c, Tracxn_Sync__Access_Method__c, Tracxn_Sync__Content_Type__c from Tracxn_Sync__Accounts_API__c] ;
+
+        Http http = new Http();
+        HttpRequest request = new HttpRequest();
+        request.setEndpoint(accApi.Tracxn_Sync__End_Point_Url__c);
+        request.setMethod(accApi.Tracxn_Sync__Access_Method__c);
+        request.setHeader('Content-Type', accApi.Tracxn_Sync__Content_Type__c);
+        request.setheader('accessToken', accApi.Tracxn_Sync__Acess_Token__c);
+        request.setBody(body);
+
+        HttpResponse response = http.send(request);
+        String responsebody = response.getBody();
+        AccountWrapper bsw = new AccountWrapper();
+        String bodyAfterReplace = AccountWrapper.replaceKeywordStrings(responsebody);
+        bsw = (AccountWrapper) JSON.deserialize(bodyAfterReplace, AccountWrapper.class);
+        accounts.addAll(updateAccountDetails(bsw, domainAccountMap, contactEmailMap, contactNameMap, true, isInsertContact,accDataMap));
+    }
+    public static List<Account> updateAccountDetails(AccountWrapper bsw, Map<String, List<Account>> domainAccountMap, Map<String, Contact> contactEmailMap, Map<String, Contact> contactNameMap, Boolean isDomain, Boolean isInsertContact,Map<Id,Account> accDataMap) {
+        try {
+            List<Account> accUpdateList = new List<Account>();
+            List<Contact> conUpdateList = new List<Contact>();
+            List<Account> updateAccLst = new List<Account>();
+            if(bsw.result != null) {
+                for (AccountWrapper.cls_result result : bsw.result) {
+                    if (isDomain) {
+                        if (domainAccountMap.containskey(result.id)) {
+                            for (Account acc : domainAccountMap.get(result.id)) {
+                                accUpdateList.add(HttpCallOut_AccountSync.setAccountDetails(result, acc, ''));
+                                if(result.employeeInfo != null) {
+                                    if(contactEmailMap != null && contactNameMap != null && result.employeeInfo.employeeList != null) {
+                                        conUpdateList.addAll(HttpCallOut_AccountSync.contactMapDetails(result.employeeInfo.employeeList, contactEmailMap, contactNameMap, acc.Id));
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        if (domainAccountMap.containskey(result.id)) {
+                            for (Account acc : domainAccountMap.get(result.id)) {
+                                accUpdateList.add(HttpCallOut_AccountSync.setAccountDetails(result, acc, ''));
+                                if(contactEmailMap != null && contactNameMap != null && result.employeeInfo.employeeList != null) {
+                                    conUpdateList.addAll(HttpCallOut_AccountSync.contactMapDetails(result.employeeInfo.employeeList, contactEmailMap, contactNameMap, acc.Id));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            if (accUpdateList.size() > 0) {
+                List<Database.SaveResult> resultlist = Database.update(accUpdateList, false);
+                
+                for (Database.SaveResult res : resultlist) {
+                    if (res.isSuccess()) {
+                        if(res != null && res.getId() != null) {
+                            if(accDataMap.containskey(res.getId())){
+                                Account acc = new Account();
+                                acc = accDataMap.get(res.getId());
+                                acc.Id = res.getId();
+                                acc.Bulk_Sync_isSuccess__c = TRUE;
+                                updateAccLst.add(acc);
+                            }
+                        }
+                    } else {
+                        if(res != null && res.getId() != null) {
+                            if(accDataMap.containskey(res.getId())){
+                                Account acc = new Account();
+                                acc = accDataMap.get(res.getId());
+                                acc.Id = res.getId();
+                                acc.Bulk_Sync_isSuccess__c = FALSE;
+                                updateAccLst.add(acc);
+                            }
+                        }
+                    }
+                }
+                if (updateAccLst.size() > 0)
+                update updateAccLst;
+            }
+            if (conUpdateList.size() > 0) {
+                List<Contact> newUpdateList = new List<Contact>();
+                if (!isInsertContact) {
+                    for (Contact con : conUpdateList) {
+                        if (con.Id != null) {
+                            newUpdateList.add(con);
+                        }
+                    }
+                } else {
+                    newUpdateList = conUpdateList;
+                }
+               // upsert newUpdateList;
+                /**
+                 * Preventing the duplicate data
+                 */
+                Map<String, Contact> contactMapForDuplicate = new Map<String, Contact>();
+                Integer customCounter = 0;
+                for (Contact contactMayDup : newUpdateList) {
+                    if (!contactMapForDuplicate.containsKey(contactMayDup.Id) && contactMayDup.Id != null) {
+                        contactMapForDuplicate.put(String.valueOf(contactMayDup.Id), contactMayDup);
+                    } else if (contactMapForDuplicate.containsKey(contactMayDup.Id)) {
+                        Contact newTempContactFromMap = new Contact();
+                        newTempContactFromMap = contactMapForDuplicate.get(contactMayDup.Id); // contact from map
+                        if (contactMayDup.Tracxn_Sync__Traxcn_Name__c != null) {
+                            newTempContactFromMap.Tracxn_Sync__Traxcn_Name__c = contactMayDup.Tracxn_Sync__Traxcn_Name__c;
+                        }
+                        if (contactMayDup.Tracxn_Sync__Traxcn_ID__c != null) {
+                            newTempContactFromMap.Tracxn_Sync__Traxcn_ID__c = contactMayDup.Tracxn_Sync__Traxcn_ID__c;
+                        }
+                        if (contactMayDup.Tracxn_Sync__Traxcn_Designation__c != null) {
+                            newTempContactFromMap.Tracxn_Sync__Traxcn_Designation__c = contactMayDup.Tracxn_Sync__Traxcn_Designation__c;
+                        }
+                        if (contactMayDup.Tracxn_Sync__Traxcn_Email_ID__c != null) {
+                            newTempContactFromMap.Tracxn_Sync__Traxcn_Email_ID__c = contactMayDup.Tracxn_Sync__Traxcn_Email_ID__c;
+                        }
+                        if (contactMayDup.Tracxn_Sync__Traxcn_Linkedin_Handle__c != null) {
+                            newTempContactFromMap.Tracxn_Sync__Traxcn_Linkedin_Handle__c = contactMayDup.Tracxn_Sync__Traxcn_Linkedin_Handle__c;
+                        }
+                        if (contactMayDup.Tracxn_Sync__Traxcn_Twitter_Handle__c != null) {
+                            newTempContactFromMap.Tracxn_Sync__Traxcn_Twitter_Handle__c = contactMayDup.Tracxn_Sync__Traxcn_Twitter_Handle__c;
+                        }
+                        if (contactMayDup.Tracxn_Sync__Traxcn_Bio__c != null) {
+                            newTempContactFromMap.Tracxn_Sync__Traxcn_Bio__c = contactMayDup.Tracxn_Sync__Traxcn_Bio__c;
+                        }
+                        contactMapForDuplicate.put(String.valueOf(newTempContactFromMap.Id), newTempContactFromMap);
+                    } else if (contactMayDup.Id == null) {
+                        contactMapForDuplicate.put(String.valueOf(customCounter), contactMayDup);
+                        customCounter = customCounter + 1;
+                    }
+                }
+                Database.upsert(contactMapForDuplicate.values(), false);
+                
+            }
+            return updateAccLst;
+        } catch(Exception ex) {
+            System.debug('Exception->'+ex.getMessage()+' in line->'+ex.getLineNumber()+' cause->'+ex.getCause());
+        }
+        return null;
+    }
+
+    global void finish(Database.BatchableContext BC) {
+        List<Tracxn_Sync__Sync_Settings_Status__c> batchStatusObject = [Select Tracxn_Sync__Job_Id__c From Tracxn_Sync__Sync_Settings_Status__c Limit 1];
+        AccountWrapper.insertLog('Account','0','0','Account Manual Bulk Batch Finished',''+accounts.size());
+        system.debug('In Finish Before Email');
+        sendResultInCSV.sendAccountDataAsCSV(accounts,'Account Bulk Manual Sync Result');
+        system.debug('In Finish After Email');
+        if (batchStatusObject.size() > 0) {
+            batchStatusObject[0].Tracxn_Sync__Job_Id__c = null;
+            update batchStatusObject;
+        }
+    } 
+}

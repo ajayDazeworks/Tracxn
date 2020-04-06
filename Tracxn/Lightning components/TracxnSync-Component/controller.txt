@@ -1,0 +1,48 @@
+({
+    doInit : function(component, event, helper) {
+        component.set("v.isOpen", true);
+        //component.set("v.spinner",true);
+        component.set("v.isAccount",false);
+        //helper.getResponse(component,'');
+        document.body.setAttribute('style', 'overflow: hidden;');
+    },
+    
+    onCancel : function(component, event, helper) {
+        $A.get("e.force:closeQuickAction").fire();
+        $A.get('e.force:refreshView').fire();
+    },
+    getByPublicId: function(component, event, helper) {
+        component.set("v.spinner",true);
+        helper.getResponse(component,component.get("v._Tracxn_ID"));
+    },
+    UpdateConList: function(component, event, helper) {
+        component.set("v.spinner",true);
+       helper.UpdateConList(component, event, helper); 
+    },
+    sendContact : function(component, event, helper) {
+        console.log('------------ Send contact controller called -----------------');
+        component.set("v.spinner",true);
+    	component.set("v.UpserConlist",true);
+        console.log('call contact');
+        let publicId = '';
+        if(component.get("v._Tracxn_ID")){
+            publicId = component.get("v._Tracxn_ID");
+        }
+        helper.getResponse(component,publicId);
+    },
+
+    closeModal : function(component, event, helper){
+        console.log('in close');
+        component.set("v.UpserConlist",false);
+        helper.getResponse(component,'');
+        //helper.displayMessage('Success','success','Contact Sync is Pending');
+        component.set("v.spinner",true);
+        /*$A.get('e.force:refreshView').fire();
+        $A.get("e.force:closeQuickAction").fire();
+        setTimeout(function(){
+            component.set("v.spinner",false);
+
+            $A.get('e.force:refreshView').fire();
+        }, 5000);*/
+    }
+})

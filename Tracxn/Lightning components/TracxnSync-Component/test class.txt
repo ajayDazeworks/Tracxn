@@ -1,0 +1,113 @@
+@isTest
+public class HttpCallOut_AccountSyncTest {
+    @testSetup static void methodName() {
+        Account accountObjectInstance = new Account();
+        accountObjectInstance.Name='Test accountObjectInstanceount' ;
+        accountObjectInstance.Website='www.1mg.com';
+        accountObjectInstance.Tracxn_Sync__Tracxn_Business_Models__c = 'Healthcare Booking' ;
+        //accountObjectInstance.Tracxn_Sync__Tracxn_Top_Competitors__c = '1mg (2015, Gurgaon, 132M USD, Series D)';
+        accountObjectInstance.Tracxn_Sync__Tracxn_Editor_s_Rating__c = '5';
+        accountObjectInstance.Tracxn_Sync__Tracxn_Latest_Annual_Revenue_USD__c = 30000;
+        accountObjectInstance.Tracxn_Sync__Tracxn_Latest_Employee_Count__c = 1000;
+        accountObjectInstance.Tracxn_Sync__Tracxn_Latest_Revenue_Multiple__c = '5.80';
+        accountObjectInstance.Tracxn_Sync__Tracxn_Latest_Valuation_USD__c = 999;
+        accountObjectInstance.Tracxn_Sync__Tracxn_PublicID__c = 'UQSt3ypOv_no0fuCDs34G2_I0qvYoXQnSMle220spEw';
+        accountObjectInstance.Tracxn_Sync__Tracxn_Score__c = 10;
+        accountObjectInstance.Tracxn_Sync__Tracxn_Soonicorn_Club_Status__c = 'Soonicorn';
+        accountObjectInstance.Tracxn_Sync__Tracxn_Total_Money_Raised__c = 100000;
+        accountObjectInstance.Tracxn_Sync__Tracxn_Acquired_Amount_USD__c = 83554;
+        accountObjectInstance.Tracxn_Sync__Tracxn_Acquired_By__c = 'testteam';
+        accountObjectInstance.Tracxn_Sync__Tracxn_Acquired_Date__c = system.today();
+        accountObjectInstance.Tracxn_Sync__Tracxn_Acquisition_Type__c = 'Acquisition';
+        accountObjectInstance.Tracxn_Sync__Tracxn_Angel_Investors__c = 'Investors';
+        //accountObjectInstance.Tracxn_Sync__Tracxn_Board_Members__c = 'members';
+        accountObjectInstance.Tracxn_Sync__Tracxn_City__c = 'Gurgaon';
+        accountObjectInstance.Tracxn_Sync__Tracxn_Company_Domain__c = '1mg.com';
+        accountObjectInstance.Tracxn_Sync__Tracxn_Company_Name__c = '1mg';
+        //accountObjectInstance.Tracxn_Sync__Tracxn_Company_Stage__c = 'new';
+        accountObjectInstance.Tracxn_Sync__Tracxn_Contact_Number_s__c = '7344821938';
+        accountObjectInstance.Tracxn_Sync__Tracxn_Country__c = 'India';
+        accountObjectInstance.Tracxn_Sync__Tracxn_Email_ID_s__c = 'tracxn@gmail.com';
+        accountObjectInstance.Tracxn_Sync__Tracxn_Facebook_Page__c = 'http://facebook.com/1mgofficial';
+        accountObjectInstance.Tracxn_Sync__Tracxn_Facilitators__c = 'new';
+        accountObjectInstance.Tracxn_Sync__Tracxn_Founded_Year__c = '2014';
+        accountObjectInstance.Tracxn_Sync__Tracxn_Institutional_Investors__c = '1mg.com';
+        accountObjectInstance.Tracxn_Sync__Tracxn_IPO_Date__c = system.today();
+        accountObjectInstance.Tracxn_Sync__Tracxn_Latest_Funding_amount__c = 4883.00;
+        accountObjectInstance.Tracxn_Sync__Tracxn_Latest_Funding_date__c = system.today();
+        accountObjectInstance.Tracxn_Sync__Tracxn_Latest_Funding_investorList__c = '04/08/2016';
+        accountObjectInstance.Tracxn_Sync__Tracxn_Latest_Funding_Round_name__c = 'Series A';
+        accountObjectInstance.Tracxn_Sync__Tracxn_Latest_News__c = 'Health Care';
+        accountObjectInstance.Tracxn_Sync__Tracxn_LinkedIn_Page__c = ' https://www.linkedin.com/company/523074';
+        accountObjectInstance.Tracxn_Sync__Tracxn_Long_Description__c = 'The online platform offers an online pharmacy store where the user can view medicines, compare price and purchase online';
+        accountObjectInstance.Tracxn_Sync__Tracxn_Part_Of__c = 'New';
+        accountObjectInstance.Tracxn_Sync__Tracxn_Short_Description__c = '';
+        accountObjectInstance.Tracxn_Sync__Tracxn_Stage__c = ' ';
+        accountObjectInstance.Tracxn_Sync__Tracxn_State__c = ' ';
+        accountObjectInstance.Tracxn_Sync__Tracxn_Stock_Ticker__c = ' ';
+        accountObjectInstance.Tracxn_Sync__Tracxn_Twitter_Handle__c = ' ';
+        accountObjectInstance.Tracxn_Sync__Tracxn_URL__c= ' ';
+        accountObjectInstance.Active__c = 'yes';
+        accountObjectInstance.Bulk_Sync_isSuccess__c = true;
+        //accountObjectInstance.Tracxn_Sync__Competitor_List__c = ' ';
+        accountObjectInstance.Tracxn_Sync__CustomerPriority__c = ' ';
+        accountObjectInstance.Tracxn_Sync__Manual_Override_Value__c = 'vygfgcggf';
+        accountObjectInstance.Tracxn_Sync__NumberofLocations__c = 10;
+        
+        
+        insert accountObjectInstance;
+        
+        Contact con = new Contact();
+        con.FirstName='Test';
+        con.LastName='Test';
+        con.Tracxn_Sync__Traxcn_Bio__c= 'employee working in 1mg.com ';
+        con.Tracxn_Sync__Traxcn_Designation__c = 'founder';
+        con.Tracxn_Sync__Traxcn_Email_ID__c = 'tracxn@gmail.com';
+        con.Tracxn_Sync__Traxcn_ID__c = 'bmg0lnWS2XIUU63tliD4URH7XsPF8v5z4uZPYUXEBKk';
+        con.Tracxn_Sync__Traxcn_Linkedin_Handle__c = 'http://linkedin.com/in/agarwalga';
+        con.Tracxn_Sync__Traxcn_Name__c = 'Prashant Tandon';
+        con.Tracxn_Sync__Traxcn_Twitter_Handle__c = 'https://twitter.com/abc';
+        con.Accountid= accountObjectInstance.id;
+        con.Email = 'xyz@x.co';
+        insert con;
+        
+        Tracxn_Sync__Accounts_API__c accAPI = new Tracxn_Sync__Accounts_API__c();
+        accAPI.Name = 'Tracxn';
+        accAPI.Tracxn_Sync__Acess_Token__c = 'adc6efe6-49d1-4c29-95bd-0e9af0585b86';
+        accAPI.Tracxn_Sync__End_Point_Url__c = 'https://tracxn.com/api/2.2/companies';
+        insert accAPI;
+    }
+    
+    @isTest
+    static void singleSync(){
+        Test.setMock(HttpCalloutMock.class, new MockHttpResponseGenerator());
+        Account account = [SELECT Id FROM Account LIMIT 1];
+        Contact contact = [SELECT Id FROM Contact LIMIT 1];
+        
+        Test.StartTest(); 
+        HttpCallOut_AccountSync.apimethod(account.Id);
+        Test.StopTest();
+        
+    }
+    
+    @isTest
+    static void testMethod1(){
+        Test.setMock(HttpCalloutMock.class, new MockHttpResponseGenerator());
+        Account account = [SELECT Id FROM Account LIMIT 1];
+        
+        Test.StartTest(); 
+        HttpCallOut_AccountSync.syncFromClassic(account.Id,'UQ/St3ypOv/no0fuC/Ds34G2/I0qvYoXQnS/Mle22/0spEw',true);
+        Test.StopTest();
+    }
+    
+    @isTest
+    static void testMethod2(){
+        Test.setMock(HttpCalloutMock.class, new MockHttpResponseGenerator());
+        Contact contact = [SELECT Id FROM Contact LIMIT 1];
+        
+        Test.StartTest(); 
+        HttpCallOut_AccountSync.apimethodcons(contact.Id);
+        Test.StopTest();
+    }
+    
+}

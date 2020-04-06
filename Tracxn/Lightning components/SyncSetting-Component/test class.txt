@@ -1,0 +1,23 @@
+@isTest
+public class SyncSettingsController_Test {
+   
+    @isTest static void testMethod1(){
+        Test.startTest();
+        
+        SyncSettingsController.SyncBatch(true, true, true);
+        
+        BulkSyncUp_LeadBatch bl = new BulkSyncUp_LeadBatch(); 
+        String accJobId = Database.executeBatch(bl,30);
+        SyncSettingsController.getBatchStatus(accJobId);
+        SyncSettingsController.getBatchStatus('');
+        
+        SyncSettingsController.scheduleSync(true, '', true, false, false, 'Monday', '10th', '04:07:22', '04:07', 'AM', false, true);
+        SyncSettingsController.scheduleSync(true, '', false, true, false, 'Monday', '10th', '04:07:22', '04:07', 'PM', false, true);
+        SyncSettingsController.scheduleSync(true, '', false, false, true, 'Monday', '10th', '04:07:22', '04:07', 'AM', false, true);
+        
+
+        SyncSettingsController.getScheduledJobInfo();
+        
+        Test.stopTest();
+    }
+}

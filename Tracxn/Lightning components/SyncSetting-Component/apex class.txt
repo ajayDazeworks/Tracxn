@@ -1,0 +1,292 @@
+public class SyncSettingsController {
+    @AuraEnabled
+    public static String SyncBatch(Boolean isAccount, Boolean isContact, Boolean isLead) {
+        String accJobId;
+        system.debug('batch schedule');
+        if (isAccount) {
+            List<Tracxn_Sync__Sync_Settings_Status__c> batchStatusObject = [Select Tracxn_Sync__Job_Id__c From Tracxn_Sync__Sync_Settings_Status__c Limit 1];
+            if(batchStatusObject.size()>0) {
+                batchStatusObject[0].Tracxn_Sync__Job_Id__c = Database.executeBatch(new BulkSyncUp_Batch(isContact),20);
+                update batchStatusObject;
+                accJobId = batchStatusObject[0].Tracxn_Sync__Job_Id__c;
+            }                        
+        }
+        if (isLead) {
+            BulkSyncUp_LeadBatch bl = new BulkSyncUp_LeadBatch();
+            List<Tracxn_Sync__Sync_Settings_Status__c> batchStatusObject = [Select Tracxn_Sync__Job_Id__c From Tracxn_Sync__Sync_Settings_Status__c Limit 1];
+            if(batchStatusObject.size()>0) {
+                system.debug('batch schedule');
+                batchStatusObject[0].Tracxn_Sync__Job_Id__c = Database.executeBatch(bl, 20);
+                update batchStatusObject;   
+                accJobId = batchStatusObject[0].Tracxn_Sync__Job_Id__c; 
+            }            
+        }
+        return accJobId;
+    }
+    @AuraEnabled
+    public static String getBatchStatus(String jobId) {
+        if (String.isNotBlank(jobId)) {
+            AsyncApexJob a = [
+                Select Id, Status, NumberOfErrors, JobItemsProcessed,
+                TotalJobItems, CreatedBy.Email, ExtendedStatus
+                from AsyncApexJob
+                where Id = :jobId
+            ];
+            String status = a.Status;
+            if (status != 'completed') {
+                status = 'Processing';
+            }
+            return status;
+        }
+        return 'Not Started';
+    }
+    @auraEnabled
+    public static Id getBatchStatus2() {
+        List<Tracxn_Sync__Sync_Settings_Status__c> batchStatusObject = [Select Tracxn_Sync__Job_Id__c From Tracxn_Sync__Sync_Settings_Status__c Limit 1];
+        if(batchStatusObject.size()>0) {
+            System.debug('batchStatusObject[0].Tracxn_Sync__Job_Id__c-->'+batchStatusObject[0].Tracxn_Sync__Job_Id__c);
+            return batchStatusObject[0].Tracxn_Sync__Job_Id__c;
+        }
+        return null;
+    }
+    @AuraEnabled
+    public static Boolean scheduleSync(Boolean isAccount, String SelectedTZ, Boolean isDaily, Boolean isWeekly,
+                                       Boolean isMonthly, String selectedDay, String selectedDate, String selectedTime, String setTime,String setMeridiem, Boolean isContact, Boolean isLead) {
+                                           try {                                              
+                                           Time selTime ;
+                                           String accountScheduleJobId = '';
+                                           String leadScheduleJobId = '';
+                                           System.debug('setMeridiem------------------>'+setMeridiem);
+                                           if (String.isNotBlank(setTime)) {
+                                               String[] tt = setTime.split(':');
+                                               selTime = Time.newInstance(Integer.valueOf(tt[0]), Integer.valueOf(tt[1]),00, 000);
+                                           }
+                                           
+                                           Database.delete([SELECT Id from Tracxn_Sync__Sync_Preferences_Setting__c limit 100]);
+                                           Tracxn_Sync__Sync_Preferences_Setting__c syncPreferencesSetting = new Tracxn_Sync__Sync_Preferences_Setting__c();
+                                           syncPreferencesSetting.Name = 'User Preferences';
+                                           syncPreferencesSetting.Tracxn_Sync__isAccount__c = isAccount;
+                                           syncPreferencesSetting.Tracxn_Sync__isContact__c = isContact;
+                                           syncPreferencesSetting.Tracxn_Sync__isDaily__c = isDaily;
+                                           syncPreferencesSetting.Tracxn_Sync__isLead__c = isLead;
+                                           syncPreferencesSetting.Tracxn_Sync__isMonthly__c = isMonthly;
+                                           syncPreferencesSetting.Tracxn_Sync__isWeekly__c = isWeekly;
+                                           syncPreferencesSetting.Tracxn_Sync__Selected_Day__c = selectedDay;
+                                           syncPreferencesSetting.Tracxn_Sync__Selected_Date__c = selectedDate;
+                                           syncPreferencesSetting.Tracxn_Sync__Selected_Time__c = setTime;
+                                           syncPreferencesSetting.Tracxn_Sync__Meridiem__c = setMeridiem;
+                                           Database.insert(syncPreferencesSetting);
+                                           
+                                           String cronExp = '';
+                                           String get_Day = '';
+                                           if(isMonthly == true) { 
+                                               String selected_Date = selectedDate.substring(0, selectedDate.length() - 2)  ;  
+                                               System.debug('selected_Date------->'+selected_Date); 
+                                               DateTime dateValue = DateTime.newInstance(System.today().year(),System.today().month(),Integer.valueOf(selected_Date));
+                                               String week_Day = dateValue.format('EEEE');
+                                               get_Day = week_Day;
+                                               System.debug('get_Day------------>'+get_Day);
+                                               if(setMeridiem == 'PM' && selTime.hour() != 12) {
+                                                   cronExp = getCronExpressionForMonthly(selTime.second() + '', selTime.minute() + '', selTime.hour()+12 + '',
+                                                                                         get_Day, isDaily, isWeekly, isMonthly, selected_Date);
+                                               } else if(setMeridiem == 'PM' && selTime.hour() == 12)   {
+                                                   cronExp = getCronExpressionForMonthly(selTime.second() + '', selTime.minute() + '', 12 + '',
+                                                                                         get_Day, isDaily, isWeekly, isMonthly, selected_Date);
+                                               } else if(setMeridiem == 'AM' && selTime.hour() == 12) {  
+                                                   cronExp = getCronExpressionForMonthly(selTime.second() + '', selTime.minute() + '', 00 + '',
+                                                                                         get_Day, isDaily, isWeekly, isMonthly, selected_Date);
+                                               }else if(setMeridiem == 'AM' && selTime.hour() != 12) {  
+                                                   cronExp = getCronExpressionForMonthly(selTime.second() + '', selTime.minute() + '', selTime.hour() + '',
+                                                                                         get_Day, isDaily, isWeekly, isMonthly, selected_Date);
+                                               }
+                                               
+                                           } else {
+                                               get_Day = selectedDay;
+                                               if(setMeridiem == 'PM' && selTime.hour() != 12) {
+                                                   cronExp = getCronExpression(selTime.second() + '', selTime.minute() + '', selTime.hour()+12 + '',
+                                                                               get_Day, isDaily, isWeekly, isMonthly);
+                                               } else if(setMeridiem == 'PM' && selTime.hour() == 12)   {
+                                                   cronExp = getCronExpression(selTime.second() + '', selTime.minute() + '', 12 + '',
+                                                                               get_Day, isDaily, isWeekly, isMonthly);
+                                               } else if(setMeridiem == 'AM' &&  selTime.hour() == 12){
+                                                       cronExp = getCronExpression(selTime.second() + '', selTime.minute() + '',00+ '',
+                                                                               get_Day, isDaily, isWeekly, isMonthly);
+                                               }else if(setMeridiem == 'AM' &&  selTime.hour() != 12){
+                                                       cronExp = getCronExpression(selTime.second() + '', selTime.minute() + '',selTime.hour()+ '',
+                                                                               get_Day, isDaily, isWeekly, isMonthly);
+                                               }
+                                               
+                                           }
+                                           list<CronJobDetail> accountContactAndLeadSyncUpAllJobsList = [Select Name from CronJobDetail where Name Like 'ScheduleBulkSyncUp--%' OR Name Like 'ScheduleLeadBulkSyncUp--%'];
+                                           if (!accountContactAndLeadSyncUpAllJobsList.isEmpty()) {
+                                               List<CronTrigger> cronTriggers = new List<CronTrigger>();
+                                               cronTriggers = [SELECT Id,CronJobDetailId FROM CronTrigger WHERE CronJobDetailId IN:accountContactAndLeadSyncUpAllJobsList];
+                                               for (CronTrigger cronTriggerInstance : cronTriggers) {
+                                                   System.abortJob(cronTriggerInstance.Id);
+                                               }
+                                           }
+                                               if (isDaily) {
+                                                   accountScheduleJobId =  system.schedule('ScheduleBulkSyncUp--Daily--' + system.now(), cronExp, new ScheduleBulkSyncUp_Batch(isAccount, isContact, isLead));
+                                               } else if (isWeekly) {
+                                                   accountScheduleJobId = system.schedule('ScheduleBulkSyncUp--Weekly--' + system.now(), cronExp, new ScheduleBulkSyncUp_Batch(isAccount, isContact, isLead));
+                                               } else if (isMonthly) {
+                                                   accountScheduleJobId = system.schedule('ScheduleBulkSyncUp--Monthly--' + system.now(), cronExp, new ScheduleBulkSyncUp_Batch(isAccount, isContact, isLead));
+                                               }
+                                           system.debug('Call schedule');
+                                           List<Tracxn_Sync__Account__c> batchStatusObject = [Select Id,Tracxn_Sync__Account_Schedule_JobId__c,Tracxn_Sync__Lead_Schedule_JobId__c From Tracxn_Sync__Account__c];
+                                           system.debug('batchStatusObject >>'+batchStatusObject);                                                
+                                           if(batchStatusObject.size() > 0){
+                                               system.debug('In delete');
+                                               delete batchStatusObject;
+                                           }
+                                           Tracxn_Sync__Account__c ts = new Tracxn_Sync__Account__c();
+                                           ts.Name = 'Bulk Schedule Sync';
+                                           ts.Tracxn_Sync__Account_Schedule_JobId__c = accountScheduleJobId;
+                                           ts.Tracxn_Sync__Lead_Schedule_JobId__c = leadScheduleJobId;
+                                           insert ts;
+                                           return true;
+                                          } catch (Exception exce) {
+                                           System.debug('Exception occurred in scheduleSync. \n Message ::' + exce.getMessage() + '\n Line Number ::' + exce.getLineNumber() + '\n Cause ::' + exce.getCause());
+                                           return false;
+                                           }
+                                       }
+    private static String getCronExpression(String seconds, String minutes, String hours,
+                                            String day, Boolean isDaily, Boolean isWeekly, Boolean isMonthly) {
+                                                try {
+                                                    String cronExpression = '';
+                                                    Map<String, Integer> dayMap = getDayMap();
+                                                    
+                                                    //Seconds 1
+                                                    cronExpression += String.isNotBlank(seconds) ? seconds : '0';
+                                                    cronExpression += ' ';
+                                                    //Minutes 2
+                                                    cronExpression += String.isNotBlank(minutes) ? minutes : '0';
+                                                    cronExpression += ' ';
+                                                    //Hours 3
+                                                    cronExpression += String.isNotBlank(hours) ? hours : '0';
+                                                    cronExpression += ' ';
+                                                    //isDaily 
+                                                    //Day_of_month 4
+                                                    //if(isDaily=true) {
+                                                    cronExpression += isDaily ? '*' : (String.isNotBlank(day) && !isWeekly ? system.today().addDays(dayMap.get(day)).day() + '' : '?');
+                                                        cronExpression += ' ';
+                                                    //Month 5
+                                                    cronExpression += isDaily || isWeekly || isMonthly ? '*' : (String.isNotBlank(day) ? system.today().addDays(dayMap.get(day)).month() + '' : '?');//cronExpression += isDaily || isWeekly || isMonthly ? '*': (String.isNotBlank(day) ?  system.today().addDays(dayMap.get(day)).month() + '' : '?');
+                                                        cronExpression += ' ';
+                                                    //Day_of_week 6
+                                                    cronExpression += isWeekly ? day.left(3) : '?';//cronExpression += isDaily  ? '?': (isWeekly ? day.left(3)  : '?');
+                                                    cronExpression += ' ';
+                                                    //optional_year 7
+                                                    //cronExpression += isDaily || isWeekly ? '*' : String.isNotBlank(day) ? system.today().addDays(dayMap.get(day)).year() + '' : '? ';
+                                                    //cronExpression += ' ';
+                                                    return cronExpression;
+                                                } catch (Exception exce) {
+                                                    System.debug('Exception occurred in getCronExpression. \n Message ::' + exce.getMessage() + '\n Line Number ::' + exce.getLineNumber() + '\n Cause ::' + exce.getCause());
+                                                    return null;
+                                                } 
+                                            }
+    /**
+* This method is called to generates cron user selects Monthly scheduling option 
+*/
+    private static String getCronExpressionForMonthly(String seconds, String minutes, String hours,
+                                                      String day, Boolean isDaily, Boolean isWeekly, Boolean isMonthly, String date_Value) {
+                                                          try {
+                                                              String cronExpression = '';
+                                                              Map<String, Integer> dayMap = getDayMap();
+                                                              
+                                                              //Seconds 1
+                                                              cronExpression += String.isNotBlank(seconds) ? seconds : '0';
+                                                              cronExpression += ' ';
+                                                              //Minutes 2
+                                                              cronExpression += String.isNotBlank(minutes) ? minutes : '0';
+                                                              cronExpression += ' ';
+                                                              //Hours 3
+                                                              cronExpression += String.isNotBlank(hours) ? hours : '0';
+                                                              cronExpression += ' ';
+                                                              //isDaily 
+                                                              //Day_of_month 4
+                                                              //if(isDaily=true) {
+                                                              cronExpression += date_Value;
+                                                              cronExpression += ' ';
+                                                              //Month 5
+                                                              cronExpression += isDaily || isWeekly || isMonthly ? '*' : (String.isNotBlank(day) ? system.today().addDays(dayMap.get(day)).month() + '' : '?');//cronExpression += isDaily || isWeekly || isMonthly ? '*': (String.isNotBlank(day) ?  system.today().addDays(dayMap.get(day)).month() + '' : '?');
+                                                                  cronExpression += ' ';
+                                                              //Day_of_week 6
+                                                              cronExpression += isWeekly ? day.left(3) : '?';//cronExpression += isDaily  ? '?': (isWeekly ? day.left(3)  : '?');
+                                                              cronExpression += ' ';
+                                                              //optional_year 7
+                                                              //cronExpression += isDaily || isWeekly ? '*' : String.isNotBlank(day) ? system.today().addDays(dayMap.get(day)).year() + '' : '? ';
+                                                              //cronExpression += ' ';
+                                                              return cronExpression;
+                                                          } catch (Exception exce) {
+                                                              System.debug('Exception occurred in getCronExpression. \n Message ::' + exce.getMessage() + '\n Line Number ::' + exce.getLineNumber() + '\n Cause ::' + exce.getCause());
+                                                              return null;
+                                                          } 
+                                                      }
+    private static Map<String, Integer> getDayMap() {
+        return new Map<String, Integer>{
+            'Sunday' => 0, 'Monday' => 1, 'Tuesday' => 2, 'Wednesday' => 3, 'Thursday' => 4, 'Friday' => 5, 'Saturday' => 6, 'Sunday' => 7
+                };
+                    }
+    @AuraEnabled
+    public static ScheduledJobWrapper getScheduledJobInfo() {
+        try {
+            List<CronJobDetail> cronJobList = [Select Name from CronJobDetail where Name Like 'ScheduleBulkSyncUp%' OR Name Like 'ScheduleLeadBulkSyncUp%'];
+            List<Tracxn_Sync__Sync_Preferences_Setting__c> syncPreferencesSetting = [Select Name,Tracxn_Sync__isAccount__c,Tracxn_Sync__Selected_Time__c,Tracxn_Sync__isContact__c,Tracxn_Sync__isDaily__c,Tracxn_Sync__Selected_Day__c,Tracxn_Sync__isLead__c,Tracxn_Sync__isMonthly__c,Tracxn_Sync__isWeekly__c, Tracxn_Sync__Meridiem__c, Tracxn_Sync__Selected_Date__c	 from Tracxn_Sync__Sync_Preferences_Setting__c limit 1];
+            ScheduledJobWrapper sjwObject = new ScheduledJobWrapper();
+            
+            List<String> dailyList = new List<String>();
+            List<String> weeklyList = new List<String>();
+            List<String> monthlyList = new List<String>();
+            for (CronJobDetail cj : cronJobList) {
+                if (cj.Name.contains('Daily')) {
+                    dailyList.add(cj.Name);
+                } else if (cj.Name.contains('Weekly')) {
+                    weeklyList.add(cj.Name);
+                } else if (cj.Name.contains('Monthly')) {
+                    monthlyList.add(cj.Name);
+                }
+                
+            }
+            sjwObject.dailyJobList = dailyList;
+            sjwObject.weeklyJobList = weeklyList;
+            sjwObject.monthlyJobList = monthlyList;
+            sjwObject.userPreferencesSetting = syncPreferencesSetting.isEmpty() ? NULL : syncPreferencesSetting[0];
+            return sjwObject;
+        } catch (Exception exce) {
+            System.debug('Exception occurred in getScheduledJobInfo. \n Message ::' + exce.getMessage() + '\n Line Number ::' + exce.getLineNumber() + '\n Cause ::' + exce.getCause());
+            return null;
+        } 
+    }
+    @AuraEnabled
+    public static String abortJobSchedule(){
+        List<Tracxn_Sync__Account__c> batchStatusObject = [Select Tracxn_Sync__Account_Schedule_JobId__c,Tracxn_Sync__Lead_Schedule_JobId__c From Tracxn_Sync__Account__c];
+        List<Tracxn_Sync__Sync_Preferences_Setting__c> syncPreferencesSetting = [Select Name from Tracxn_Sync__Sync_Preferences_Setting__c limit 1];
+        if(syncPreferencesSetting.size() > 0){
+            delete syncPreferencesSetting;
+        }
+        if (batchStatusObject.size() > 0) {
+            if(batchStatusObject[0].Tracxn_Sync__Account_Schedule_JobId__c != null){
+                system.abortJob(batchStatusObject[0].Tracxn_Sync__Account_Schedule_JobId__c);
+            }
+            if(batchStatusObject[0].Tracxn_Sync__Lead_Schedule_JobId__c != null){
+                system.abortJob(batchStatusObject[0].Tracxn_Sync__Lead_Schedule_JobId__c);
+            }
+            delete   batchStatusObject;
+            
+            return 'Scheduled Setting Removed Successfully.';
+        }
+        return 'You Do not Have Any Scheduled Setting.';
+        
+    }
+    public class ScheduledJobWrapper {
+        @AuraEnabled
+        public List<String> dailyJobList { get; set; }
+        @AuraEnabled
+        public List<String> weeklyJobList { get; set; }
+        @AuraEnabled
+        public List<String> monthlyJobList { get; set; }
+        @AuraEnabled
+        public Tracxn_Sync__Sync_Preferences_Setting__c userPreferencesSetting { get; set; }
+    }
+}

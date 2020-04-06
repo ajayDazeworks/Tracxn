@@ -1,0 +1,46 @@
+<aura:component
+        implements="force:lightningQuickActionWithoutHeader,force:hasRecordId,flexipage:availableForAllPageTypes"
+        access="global" controller="HttpCallOut_LeadSync">
+    <aura:attribute name="isOpen" type="boolean" default="false"/>
+    <aura:attribute name="issuccessOpen" type="boolean" default="false"/>
+    <aura:attribute name="UpserConlist" type="boolean" default="false"/>
+    <aura:attribute name="isAccount" type="boolean" default="true"/>
+    <aura:attribute name="NoResult" type="boolean" default="false"/>
+    <aura:attribute name="_Tracxn_ID" type="String"/>
+    <aura:attribute name="spinner" type="boolean" default="FALSE"/>
+    <aura:handler name="init" value="{!this}" action="{!c.doInit}"/>
+    
+    <aura:if isTrue="{!v.isOpen}">
+        <div>
+            <h4 class="title slds-text-heading--medium">Tracxn Sync</h4>
+        </div>
+        <br/>
+        <p style="color:blue;"><b>Sync in progress..</b></p>
+    </aura:if>
+
+    <aura:if isTrue="{!v.NoResult}">
+        <aura:html tag="style">
+        .slds-modal__content:last-child{
+        	height: 350px !important;
+    max-height: 500px !important;
+        }
+    </aura:html>
+        <div class="slds-form-element">
+            <label class="slds-form-element__label" for="text-input-id-1"></label>
+            <div class="slds-form-element__control">
+                <label class="slds-form-element__label" for="text-input-id-1">
+                    <p><b>Tracxn Sync</b></p>
+                    <p style="color:blue;"><b>Unable to find a match in the Tracxn Database</b></p>
+                    <p>To manually link this lead, navigate to the company on Tracxn.com and paste the URL below</p>
+                </label>
+                <img src="{!$Resource.companyUrl}"/>
+                <lightning:input type="text" label="Enter_Traxcn_URL" name="Enter _Tracxn_ID"
+                                 value="{!v._Tracxn_ID}"/>
+                <br/>
+                <div style="text-align:right">
+                <lightning:button variant="brand" label="Submit" title="Brand action" onclick="{! c.getByPublicId }"/>
+                </div>
+            </div>
+        </div>
+    </aura:if>
+</aura:component>

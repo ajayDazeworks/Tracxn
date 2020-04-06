@@ -1,0 +1,86 @@
+<aura:component
+                implements="force:lightningQuickActionWithoutHeader,force:hasRecordId,flexipage:availableForAllPageTypes"
+                access="global" controller="HttpCallOut_AccountSync">
+    
+    <aura:attribute name="isOpen" type="boolean" default="false"/>
+    <aura:attribute name="issuccessOpen" type="boolean" default="false"/>
+    <aura:attribute name="UpserConlist" type="boolean" default="false"/>
+    <aura:attribute name="isAccount" type="boolean" default="true"/>
+    <aura:attribute name="NoResult" type="boolean" default="false"/>
+    <aura:attribute name="_Tracxn_ID" type="String"/>
+    <aura:attribute name="spinner" type="boolean" default="FALSE"/>
+    <aura:handler name="init" value="{!this}" action="{! c.doInit}"/>
+    <aura:if isTrue="{!v.spinner}">
+        <div aura:id="spinnerId" class="slds-spinner_container">
+            <div class="slds-spinner--brand  slds-spinner slds-spinner--large slds-is-relative" role="alert">
+                <span class="slds-assistive-text">Loading...</span>
+                <div class="slds-spinner__dot-a"></div>
+                <div class="slds-spinner__dot-b"></div>
+            </div>
+        </div>
+    </aura:if>
+    
+    
+    <!--.slds-modal__content{  
+       overflow-y: hidden !important;  
+     } 
+    </aura:html>-->
+    
+    
+    <aura:if isTrue="{!v.isOpen}">
+        
+        <div>
+            <h4 class="title slds-text-heading--medium">Tracxn Sync</h4>
+        </div>
+        <br/>
+        <p style="color:blue;"><b>Account sync in progress ...</b></p>
+    </aura:if>
+    <aura:if isTrue="{!!v.isAccount}">
+        <div style="text-align:center;">
+            <div >
+                <label class="slds-form-element__label" for="text-input-id-1">
+                    <h3><p style ="margin-inline-start: -72px;"><b>Do you also want to sync 'Contact' details and add any new 'Contacts' to the account?</b>
+                        <p style="font-size:12px;color: grey;margin-inline-start: -442px;">Example:</p>
+                        <p style="font-size:12px;color: grey;margin-inline-start: -126px;"> Do you want to add Elon Musk's contact details to Tesla's account?<br/>
+                        </p></p></h3>
+                </label>
+                <br/>
+                <div style="margin-top:17px;">
+                    <lightning:button class="slds-button slds-button_neutral" variant="brand" label="No"
+                                      title="Brand action" onclick="{! c.closeModal }"/>
+                    <lightning:button class="slds-button slds-button_neutral" variant="brand" label="Yes"
+                                      title="Brand action" onclick="{! c.sendContact }"/>
+                </div>
+            </div>
+        </div>
+        
+    </aura:if>
+    
+    <aura:if isTrue="{!v.NoResult}">
+        <aura:html tag="style">
+        .slds-modal__content:last-child{
+        	height: 350px !important;
+    max-height: 500px !important;
+        }
+    </aura:html>
+        <div class="slds-form-element">
+            
+            <label class="slds-form-element__label" for="text-input-id-1"></label>
+            <div class="slds-form-element__control">
+                <label class="slds-form-element__label" for="text-input-id-1">
+                    <p><b>Tracxn Sync</b></p>
+                    <p style="color:blue;"><b>Unable to find a match in the Tracxn Database</b></p>
+                    <p>To manually link this account, navigate to the company on Tracxn and paste the URL below</p>
+                </label>
+                <img src="{!$Resource.companyUrl}"/>
+                <lightning:input type="text" label="Enter Traxcn URL" name="Enter _Tracxn_ID"
+                                 value="{!v._Tracxn_ID}"/>
+                <br/>
+                <div style="text-align:right">
+                    <lightning:button variant="brand" label="Submit" title="Brand action" onclick="{! c.getByPublicId }"/>
+                </div>
+                </div>
+            
+        </div>
+    </aura:if>
+</aura:component>

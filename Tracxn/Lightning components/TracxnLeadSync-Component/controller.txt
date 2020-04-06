@@ -1,0 +1,10 @@
+({
+    doInit: function (component, event, helper) {
+        component.set("v.isOpen", true);
+        helper.getResponse(component, '');
+    },
+    getByPublicId: function (component, event, helper) {
+        component.set("v.isOpen", true);
+        helper.getResponse(component, component.get("v._Tracxn_ID"));
+    },
+})

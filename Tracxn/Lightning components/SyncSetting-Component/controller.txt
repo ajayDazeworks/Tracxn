@@ -1,0 +1,70 @@
+({
+    doInit: function (component, event, helper) {
+        helper.doInitHelper(component, event, helper);
+    },
+
+    handleClick: function (component, event, helper) {
+        let isAccount = component.get('v.AccountSync');
+        let isContact = component.get('v.valueCon');
+        let isLead = component.get('v.LeadSync');
+        let action = component.get("c.SyncBatch");
+        action.setParams({isAccount: isAccount, isContact: isContact, isLead: isLead});
+        action.setCallback(this, function (response) {
+            let state = response.getState();
+            if (state === "SUCCESS") {
+                component.set('v.accJobId', response.getReturnValue());
+                helper.pollApex(component, event, helper);
+            } else if (state === "ERROR") {
+                let errors = response.getError();
+                if (errors) {
+                    if (errors[0] && errors[0].message) {
+                        console.log("Error message: ", errors[0].message);
+                    }
+                } else {
+                    console.log("Unknown error");
+                }
+            }
+        });
+        $A.enqueueAction(action);
+
+    },
+
+    scheduleApexSync: function (component, event, helper) {
+        let selectedScheduleType = component.get("v.selectedValue");
+        console.log(selectedScheduleType);
+        if(selectedScheduleType == 'Do not sync'){
+            helper.abortScheduleJob(component, event, helper);
+        }else{
+            helper.scheduleApexSync_Helper(component, event, helper);
+        }
+    },
+
+    Vfpageurl: function (component, event, helper) {
+        window.open("/apex/Tracxn_Sync__BulkAccountSyncResult");
+    },
+    Vfpageurllead: function (component, event, helper) {
+        window.open("/apex/Tracxn_Sync__BulkLeadSyncResult");
+    },
+
+    setScheduleType: function (component, event, helper) {
+        let selectedScheduleType = component.get("v.selectedValue");
+        console.log("selectedScheduleType: "+selectedScheduleType);
+        if (selectedScheduleType === 'Daily') {
+            component.set("v.isDaily", true);
+            component.set("v.isWeekly", false);
+            component.set("v.isMonthly", false);
+        } else if (selectedScheduleType === 'Weekly') {
+            component.set("v.isDaily", false);
+            component.set("v.isWeekly", true);
+            component.set("v.isMonthly", false);
+        } else if (selectedScheduleType === 'Monthly') {
+            component.set("v.isDaily", false);
+            component.set("v.isWeekly", false);
+            component.set("v.isMonthly", true);
+        }else if(selectedScheduleType == 'Do not sync'){
+            component.set("v.isDaily", false);
+            component.set("v.isWeekly", false);
+            component.set("v.isMonthly", false);
+        }
+    }
+})

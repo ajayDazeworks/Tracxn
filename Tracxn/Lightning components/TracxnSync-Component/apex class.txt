@@ -1,0 +1,740 @@
+global class HttpCallOut_AccountSync {
+    webservice static void apimethod(String recordid) {
+        apiResponse res = new apiResponse();
+        res = getcalloutResponseContents(recordId, '', false);
+    }
+    
+    webservice static void apimethodcons(String recordid) {
+        apiResponse res = new apiResponse();
+        res = getcalloutResponseContents(recordId, '', true);
+    }
+    
+    webservice static void syncFromClassic(String recordid, String publicUrl, Boolean UpdateconList) {
+        apiResponse res = new apiResponse();
+        res = getcalloutResponseContents(recordid, publicUrl, UpdateconList);
+    }
+    
+    
+    @AuraEnabled
+    public static apiResponse getcalloutResponseContents(String recordid, String publicId, Boolean UpdateconList) {
+        List<Contact> conList = new List<Contact>();
+        Map<String, Contact> contactEmailMap = new Map<String, contact>();
+        Map<String, Contact> contactNameMap = new Map<String, contact>();
+        Account acc = new Account();
+        Lead le = new Lead();
+        apiResponse res = new apiResponse();
+        String domainName = '';
+        if (string.isNotBlank(publicId)) {
+            publicId = publicId.split('/')[5];
+        }
+        
+        if (recordid.startsWith('001')) {
+            acc = [
+                Select Tracxn_Sync__Manual_Override_Value__c,id,Website,Tracxn_Sync__Tracxn_Company_Domain__c,Tracxn_Sync__Tracxn_Founded_Year__c,Tracxn_Sync__Tracxn_Facebook_Page__c,Tracxn_Sync__Tracxn_Twitter_Handle__c,Tracxn_Sync__Tracxn_Stage__c,
+                Tracxn_Sync__Tracxn_Latest_Funding_investorList__c,Tracxn_Sync__Tracxn_Country__c, Tracxn_Sync__Tracxn_Company_Name__c,Tracxn_Sync__Tracxn_PublicID__c, (SELECT Id,Name,FirstName,LastName,Email,AccountId,Tracxn_Sync__Traxcn_Email_ID__c,Tracxn_Sync__Traxcn_Name__c FROM Contacts)
+                From Account
+                Where Id = :recordid
+            ];
+            domainName = acc.Website;
+            if (acc.Tracxn_Sync__Manual_Override_Value__c != null) {
+                publicId = acc.Tracxn_Sync__Manual_Override_Value__c;
+            }
+        }
+        for (contact con : acc.Contacts) {
+            if (con.Email != null && con.AccountId != null) {
+                contactEmailMap.put(con.Email .toLowerCase() + '-' + con.AccountId, con); //contact email - contact account id
+            }
+            if (con.Name != null && con.AccountId != null) {
+                contactNameMap.put(con.Name.toLowerCase() + '-' + con.AccountId, con);
+            }
+        }
+        Tracxn_Sync__Accounts_API__c accApi = [select id,Tracxn_Sync__end_point_url__c,Tracxn_Sync__acess_token__c, Tracxn_Sync__Access_Method__c, Tracxn_Sync__Content_Type__c from Tracxn_Sync__Accounts_API__c] ;
+        
+        Http http = new Http();
+        HttpRequest request = new HttpRequest();
+        request.setEndpoint(accApi.Tracxn_Sync__End_Point_Url__c);
+        request.setMethod(accApi.Tracxn_Sync__Access_Method__c);
+        request.setHeader('Content-Type', accApi.Tracxn_Sync__Content_Type__c);
+        request.setheader('accessToken', accApi.Tracxn_Sync__Acess_Token__c);
+        // Set the body as a JSON object
+        
+        String body = '';
+        String compititorDomain = ''; // Not use any where
+        if (String.isNotBlank(domainName)) {
+            domainName = domainName.replace('https://', '');
+            domainName = domainName.replace('http://', '');
+            domainName = domainName.replace('www.', '');
+            domainName = domainName.replace('/', '');
+        }
+        
+        if (String.isBlank(domainName) && String.isBlank(publicId)) {
+            res.apiType = '';
+            res.message = 'No Result';
+            return res;
+        }
+        if (publicId == '') {
+            body = '{"filter":{"domain":["';
+            body = body + domainName.toLowerCase();
+            body = body + '"]}}';
+            compititorDomain = domainName;
+        } else {
+            body = '{"filter":{"id":["';
+            body = body + publicId;
+            body = body + '"]}}';
+            compititorDomain = publicId;
+        }
+        request.setBody(body);
+        HttpResponse response = http.send(request);
+        String message = '';
+        
+        String responsebody = response.getBody();
+        if (!responsebody.contains('errorCode')) {
+            String bodyAfterReplace = AccountWrapper.replaceKeywordStrings(responsebody);
+            
+            AccountWrapper hac = parse(bodyAfterReplace);
+            if (hac.result.size() > 0) {
+                if (recordid.startsWith('001')) {
+                    Account acc1 = new Account();
+                    if (hac != null && hac.result.size() > 0) {
+                        acc1 = setAccountDetails(hac.result[0], acc, publicId);
+                        update acc1;
+                        if (UpdateconList) {
+                            if (hac.result[0].employeeInfo != null && hac.result[0].employeeInfo.employeeList != null) {
+                                if (hac.result[0].employeeInfo.employeeList.size() > 0) {
+                                    conList = contactMapDetails(hac.result[0].employeeInfo.employeeList, contactEmailMap, contactNameMap, acc.Id);
+                                    /**
+* Preventing the duplicate data
+*/
+                                    Map<String, Contact> contactMapForDuplicate = new Map<String, Contact>();
+                                    Integer customCounter = 0;
+                                    for (Contact contactMayDup : conList) {
+                                        if (!contactMapForDuplicate.containsKey(contactMayDup.Id) && contactMayDup.Id != null) {
+                                            contactMapForDuplicate.put(String.valueOf(contactMayDup.Id), contactMayDup);
+                                        } else if (contactMapForDuplicate.containsKey(contactMayDup.Id)) {
+                                            Contact newTempContactFromMap = new Contact();
+                                            newTempContactFromMap = contactMapForDuplicate.get(contactMayDup.Id); // contact from map
+                                            if (contactMayDup.Tracxn_Sync__Traxcn_Name__c != null) {
+                                                newTempContactFromMap.Tracxn_Sync__Traxcn_Name__c = contactMayDup.Tracxn_Sync__Traxcn_Name__c;
+                                            }
+                                            if (contactMayDup.Tracxn_Sync__Traxcn_ID__c != null) {
+                                                newTempContactFromMap.Tracxn_Sync__Traxcn_ID__c = contactMayDup.Tracxn_Sync__Traxcn_ID__c;
+                                            }
+                                            if (contactMayDup.Tracxn_Sync__Traxcn_Designation__c != null) {
+                                                newTempContactFromMap.Tracxn_Sync__Traxcn_Designation__c = contactMayDup.Tracxn_Sync__Traxcn_Designation__c;
+                                            }
+                                            if (contactMayDup.Tracxn_Sync__Traxcn_Email_ID__c != null) {
+                                                newTempContactFromMap.Tracxn_Sync__Traxcn_Email_ID__c = contactMayDup.Tracxn_Sync__Traxcn_Email_ID__c;
+                                            }
+                                            if (contactMayDup.Tracxn_Sync__Traxcn_Linkedin_Handle__c != null) {
+                                                newTempContactFromMap.Tracxn_Sync__Traxcn_Linkedin_Handle__c = contactMayDup.Tracxn_Sync__Traxcn_Linkedin_Handle__c;
+                                            }
+                                            if (contactMayDup.Tracxn_Sync__Traxcn_Twitter_Handle__c != null) {
+                                                newTempContactFromMap.Tracxn_Sync__Traxcn_Twitter_Handle__c = contactMayDup.Tracxn_Sync__Traxcn_Twitter_Handle__c;
+                                            }
+                                            if (contactMayDup.Tracxn_Sync__Traxcn_Bio__c != null) {
+                                                newTempContactFromMap.Tracxn_Sync__Traxcn_Bio__c = contactMayDup.Tracxn_Sync__Traxcn_Bio__c;
+                                            }
+                                            contactMapForDuplicate.put(String.valueOf(newTempContactFromMap.Id), newTempContactFromMap);
+                                        } else if (contactMayDup.Id == null) {
+                                            contactMapForDuplicate.put(String.valueOf(customCounter), contactMayDup);
+                                            customCounter = customCounter + 1;
+                                        }
+                                    }
+                                    Database.upsert(contactMapForDuplicate.values(), false);
+                                }
+                            }
+                        }
+                        res.message = 'Success';
+                    }
+                }
+            } else {
+                res.apiType = '';
+                res.message = 'No Result';
+                
+            }
+        } else {
+            res.apiType = '';
+            res.message = 'Error';
+        }
+        return res;
+    }
+    
+    
+    
+    public static Account setAccountDetails(AccountWrapper.cls_result result, Account acc, String publicId) {
+        //try {
+        if (result != null) {
+            acc = blankAccount(acc.Id);
+            acc.Tracxn_Sync__Bulk_Sync_isSuccess__c = True;
+            
+            if (result.facilitatorList != null && result.facilitatorList.fundingFacilitatorList != null) {
+                String facilators = '';
+                for (AccountWrapper.cls_fundingFacilitatorList fund : result.facilitatorList.fundingFacilitatorList) {
+                    if(String.isNotBlank(fund.name)){
+                        facilators += fund.name + ', ';
+                    }
+                }
+                facilators = facilators.removeEnd(', ');
+                acc.Tracxn_Sync__Tracxn_Facilitators__c = facilators;
+            }else{
+                acc.Tracxn_Sync__Tracxn_Facilitators__c = null;
+            }
+            if (result.companyRatings != null && result.companyRatings.editorRatingInfo != null && result.companyRatings.editorRatingInfo.rating != null) {
+                acc.Tracxn_Editor_s_Rating__c = string.valueof(result.companyRatings.editorRatingInfo.rating);
+            } else {
+                acc.Tracxn_Sync__Tracxn_Editor_s_Rating__c = null;
+            }
+            if (result.latestEmployeeCount != null && result.latestEmployeeCount.value != null) {
+                acc.Tracxn_Sync__Tracxn_Latest_Employee_Count__c = integer.valueof(result.latestEmployeeCount.value);
+            } else {
+                acc.Tracxn_Sync__Tracxn_Latest_Employee_Count__c = null;
+            }
+            if (String.isNotBlank(result.stage)) {
+                acc.Tracxn_Sync__Tracxn_Stage__c = result.stage;
+            } else {
+                acc.Tracxn_Sync__Tracxn_Stage__c = null;
+            }
+            
+            if (String.isNotBlank(result.id)) {
+                acc.Tracxn_Sync__Tracxn_PublicID__c = result.id;
+            } else {
+                acc.Tracxn_Sync__Tracxn_PublicID__c = null;
+            }
+            if (String.isNotBlank(result.name)) {
+                acc.Tracxn_Sync__Tracxn_Company_Name__c = result.name;
+                
+            } else {
+                acc.Tracxn_Sync__Tracxn_Company_Name__c = null;
+            }
+            if (String.isNotBlank(result.foundedYear)) {
+                acc.Tracxn_Sync__Tracxn_Founded_Year__c = result.foundedYear;
+                
+            } else {
+                acc.Tracxn_Sync__Tracxn_Founded_Year__c = null;
+            }
+            
+            if (String.isNotBlank(result.domain)) {
+                acc.Tracxn_Sync__Tracxn_Company_Domain__c = result.domain;
+                
+            } else {
+                acc.Tracxn_Sync__Tracxn_Company_Domain__c = null;
+            }
+            if (String.isNotBlank(result.tracxnUrl)) {
+                acc.Tracxn_Sync__Tracxn_URL__c = result.tracxnUrl;
+                
+            } else {
+                acc.Tracxn_Sync__Tracxn_URL__c = null;
+            }
+            if (result.totalMoneyRaised != null && result.totalMoneyRaised.totalamount != null && result.totalMoneyRaised.totalamount.amount != null) {
+                acc.Tracxn_Sync__Tracxn_Total_Money_Raised__c = double.valueof(result.totalMoneyRaised.totalamount.amount);
+            } else {
+                acc.Tracxn_Sync__Tracxn_Total_Money_Raised__c = null;
+            }
+            if (result.description != null && result.description.longs != null) {
+                acc.Tracxn_Sync__Tracxn_Long_Description__c = result.description.longs;
+            } else {
+                acc.Tracxn_Sync__Tracxn_Long_Description__c = null;
+            }
+            if (result.description != null && result.description.shorts != null) {
+                acc.Tracxn_Sync__Tracxn_Short_Description__c = result.description.shorts;
+            } else {
+                acc.Tracxn_Sync__Tracxn_Short_Description__c = null;
+            }
+            if (result.locations != null) {
+                acc.Tracxn_Sync__NumberofLocations__c = result.locations.size(); // TODO: fields in not visible on layout also not available for it
+            } else {
+                acc.Tracxn_Sync__NumberofLocations__c = null;
+            }
+            if (result.acquirerInfo != null && result.acquirerInfo.acquirerList != null) {
+                string acquire = '';
+                for (AccountWrapper.cls_acquirerList aqd : result.acquirerInfo.acquirerList) {
+                    if(aqd.acquirers != null){
+                        for (AccountWrapper.cls_acquirers acq : aqd.acquirers) {
+                            if(acq.name != null){
+                                acquire += acq.name + ',';
+                            }
+                        }
+                    }
+                }
+                acquire = acquire.removeEnd(',');
+                acc.Tracxn_Sync__Tracxn_Acquired_By__c = acquire;
+            } else {
+                acc.Tracxn_Sync__Tracxn_Acquired_By__c = null;
+            }
+            if (result.acquirerInfo != null && result.acquirerInfo.acquirerList != null) {
+                for (AccountWrapper.cls_acquirerList aqd : result.acquirerInfo.acquirerList) {
+                    if (aqd.amount != null && aqd.amount.amount != null) {
+                        acc.Tracxn_Sync__Tracxn_Acquired_Amount_USD__c = aqd.amount.amount;
+                    }
+                    
+                }
+            } else {
+                acc.Tracxn_Sync__Tracxn_Acquired_Amount_USD__c = null;
+            }
+            
+            if (result.businessModelList != null && result.businessModelList != NULL) {
+                String businessModelName = '';
+                for (AccountWrapper.cls_businessModelList cbm : result.businessModelList) {
+                    if (cbm != null && cbm.fullPathString != null) {
+                        businessModelName += '-' + cbm.fullPathString + '\n';
+                    }
+                    // businessModelName += cbm.Name+'\n';
+                }
+                //businessModelName = businessModelName.removeEnd(',');acc.Tracxn_Business_Models__c = businessModelName;
+                acc.Tracxn_Sync__Tracxn_Business_Models__c = businessModelName;
+            } else {
+                acc.Tracxn_Sync__Tracxn_Business_Models__c = null;
+            }
+            if (result.location != null && result.location.city != null) {
+                acc.Tracxn_Sync__Tracxn_City__c = result.location.city;
+            } else {
+                acc.Tracxn_Sync__Tracxn_City__c = null;
+            }
+            if (result.location != null && result.location.state != null) {
+                acc.Tracxn_Sync__Tracxn_State__c = result.location.state;
+            } else {
+                acc.Tracxn_Sync__Tracxn_State__c = null;
+            }
+            if (result.location != null && result.location.country != null) {
+                acc.Tracxn_Sync__Tracxn_Country__c = result.location.country;
+            } else {
+                acc.Tracxn_Sync__Tracxn_Country__c = null;
+            }
+            if (result.profileLinks != null && result.profileLinks.facebook != null) {
+                acc.Tracxn_Sync__Tracxn_Facebook_Page__c = result.profileLinks.facebook; // TODO : field is not available on layout check it
+            } else {
+                acc.Tracxn_Sync__Tracxn_Facebook_Page__c = null;
+            }
+            if (result.profileLinks != null && result.profileLinks.twitter != null) {
+                acc.Tracxn_Sync__Tracxn_Twitter_Handle__c = result.profileLinks.twitter; // TODO : field issue
+            } else {
+                acc.Tracxn_Sync__Tracxn_Twitter_Handle__c = null;
+            }
+            if (result.profileLinks != null && result.profileLinks.linkedIn != null) {
+                acc.Tracxn_Sync__Tracxn_LinkedIn_Page__c = result.profileLinks.linkedIn; // TODO : field
+            } else {
+                acc.Tracxn_Sync__Tracxn_LinkedIn_Page__c = null;
+            }
+            
+            if (result.profileLinks != null && result.profileLinks.linkedIn != null) {
+                acc.Tracxn_Sync__Tracxn_LinkedIn_Page__c = result.profileLinks.linkedIn; // TODO : field classic
+            } else {
+                acc.Tracxn_Sync__Tracxn_LinkedIn_Page__c = null;
+            }
+            if (result.newsInfo != null && result.newsInfo.newsList != null) {
+                String news = '';
+                if (result.newsInfo.newsList.size() > 0) {
+                    Integer idx = 1;
+                    for (AccountWrapper.cls_newsList cn : result.newsInfo.newsList) {
+                        news += '' + idx + '. ' + cn.headLine + '\n';
+                        idx += 1;
+                    }
+                    news = news.removeEnd(',');
+                    if (news.length() > 131072) {
+                        acc.Tracxn_Sync__Tracxn_Latest_News__c = news.substring(0, 131072);
+                    } else {
+                        acc.Tracxn_Sync__Tracxn_Latest_News__c = news;
+                    }
+                }
+            } else {
+                acc.Tracxn_Sync__Tracxn_Latest_News__c = null;
+            }
+            if (result.fundingInfo != null && result.fundingInfo.fundingRoundList != null) {
+                String fundingName = '';
+                if (result.fundingInfo.fundingRoundList.size() > 0) {
+                    for (AccountWrapper.cls_fundingRoundList fund : result.fundingInfo.fundingRoundList) {
+                        fundingName += fund.Name + ',';
+                    }
+                    fundingName = fundingName.removeEnd(',');
+                    acc.Tracxn_Sync__Tracxn_Latest_Funding_Round_name__c = result.fundingInfo.fundingRoundList[0].Name;
+                }
+            } else {
+                acc.Tracxn_Sync__Tracxn_Latest_Funding_Round_name__c = null;
+            }
+            if (result.fundingInfo != null && result.fundingInfo.fundingRoundList != null) {
+                if (result.fundingInfo.fundingRoundList[0].dates != null) {
+                    integer year = result.fundingInfo.fundingRoundList[0].dates.year;
+                    integer month = result.fundingInfo.fundingRoundList[0].dates.month;
+                    integer day = result.fundingInfo.fundingRoundList[0].dates.day;
+                    Date myDate = Date.newInstance(Integer.valueOf(year), Integer.valueOf(month), Integer.valueOf(day));
+                    acc.Tracxn_Sync__Tracxn_Latest_Funding_date__c = myDate;
+                } else {
+                    acc.Tracxn_Sync__Tracxn_Latest_Funding_date__c = null;
+                }
+            }
+            if (result.fundingInfo != null && result.fundingInfo.fundingRoundList != null) {
+                Decimal fundAmount = 0;
+                if (result.fundingInfo.fundingRoundList.size() > 0) {
+                    for (AccountWrapper.cls_fundingRoundList fund : result.fundingInfo.fundingRoundList) {
+                        if (fund.amount != null) {
+                            fundAmount += fund.amount.amount;
+                        }
+                    }
+                    if(result.fundingInfo.fundingRoundList[0].amount != null && result.fundingInfo.fundingRoundList[0].amount.amount != null){
+                        acc.Tracxn_Sync__Tracxn_Latest_Funding_amount__c = result.fundingInfo.fundingRoundList[0].amount.amount;
+                    }
+                }
+            } else {
+                acc.Tracxn_Sync__Tracxn_Latest_Funding_amount__c = null;
+            }
+            if (result.investorList != null && result.investorList != null) {
+                string companyname = ''; string peopleName = '';
+                if (result.investorList.size() > 0) {
+                    for (AccountWrapper.cls_investorList inv : result.investorList) {
+                        if (inv.type == 'COMPANY') {
+                            companyname += inv.name + ',';
+                        }
+                        if (inv.type == 'PEOPLE') {
+                            peopleName += inv.name + ',';
+                        }
+                    }
+                    companyname = companyname.removeEnd(',');
+                    peopleName = peopleName.removeEnd(',');
+                    acc.Tracxn_Sync__Tracxn_Institutional_Investors__c = companyname;
+                    acc.Tracxn_Sync__Tracxn_Angel_Investors__c = peopleName;
+                }
+            } else {
+                acc.Tracxn_Sync__Tracxn_Institutional_Investors__c = null;
+                acc.Tracxn_Sync__Tracxn_Angel_Investors__c = null;
+            }
+            if (result.profileLinks != null && result.profileLinks.facebook != null) {
+                acc.Tracxn_Sync__Tracxn_Facebook_Page__c = result.profileLinks.facebook; // TODO: field on classic
+            } else {
+                acc.Tracxn_Sync__Tracxn_Facebook_Page__c = null;
+            }
+            /**
+* Mapping the company general email to account info
+*/
+            if (result.emailList != null) {
+                String empEmail = '';
+                if (result.emailList.size() > 0) {
+                    for (AccountWrapper.cls_emailList em : result.emailList) {
+                        empEmail = empEmail + em.email + ', ';
+                    }
+                }
+                empEmail = empEmail.removeEnd(',');
+                acc.Tracxn_Sync__Tracxn_Email_ID_s__c = empEmail;
+            }
+            
+            /*if (result.employeeInfo != null) {
+if (result.employeeInfo.employeeList != null) {
+if (result.employeeInfo.employeeList.size() > 0 && result.employeeInfo.employeeList[0].emailInfo != null && result.employeeInfo.employeeList[0].emailInfo.primaryEmail != null && result.employeeInfo.employeeList[0].emailInfo.primaryEmail != null) {
+acc.Tracxn_Sync__Tracxn_Email_ID_s__c = result.employeeInfo.employeeList[0].emailInfo.primaryEmail;
+}
+}
+} else {
+acc.Tracxn_Sync__Tracxn_Email_ID_s__c = null;
+}*/
+            if (result.companyRatings != null && result.companyRatings.soonicornClubInfo != null) {
+                if (result.companyRatings.soonicornClubInfo.latestSoonicornClubInfo != null && result.companyRatings.soonicornClubInfo.latestSoonicornClubInfo.rating != null) {
+                    acc.Tracxn_Sync__Tracxn_Soonicorn_Club_Status__c = result.companyRatings.soonicornClubInfo.latestSoonicornClubInfo.rating;
+                }
+            } else {
+                acc.Tracxn_Sync__Tracxn_Soonicorn_Club_Status__c = null;
+            }
+            if (result.partOf != null && result.partOf.name != null) {
+                acc.Tracxn_Sync__Tracxn_Part_Of__c = result.partOf.name;
+            } else {
+                acc.Tracxn_Sync__Tracxn_Part_Of__c = null;
+            }
+            
+            if (result.latestAnnualRevenue != null && result.latestAnnualRevenue.amount != null) {
+                acc.Tracxn_Sync__Tracxn_Latest_Annual_Revenue_USD__c = result.latestAnnualRevenue.amount.value;
+                
+                
+            } else {
+                acc.Tracxn_Sync__Tracxn_Latest_Annual_Revenue_USD__c = null;
+            }
+            
+            if (result.ipoInfo != null && result.ipoInfo.ipoList != null) {
+                for (AccountWrapper.cls_ipoList fundd : result.ipoInfo.ipoList) {
+                    for (AccountWrapper.cls_ipoList ipolst : result.ipoInfo.ipoList) {
+                        acc.Tracxn_Sync__Tracxn_Stock_Ticker__c = ipolst.stockExchange + ':' + ipolst.stockSymbol;
+                    }
+                }
+            } else {
+                acc.Tracxn_Sync__Tracxn_Stock_Ticker__c = null;
+            }
+            
+            
+            if (result.fundingInfo != null && result.fundingInfo.fundingRoundList != null) {
+                string RoundList = '';
+                if (result.fundingInfo.fundingRoundList[0].investorList != null && result.fundingInfo.fundingRoundList[0].investorList.size() > 0) {
+                    for (AccountWrapper.cls_investorList inv : result.fundingInfo.fundingRoundList[0].investorList) {
+                        if (inv != null && inv.name != null) {
+                            RoundList += inv.name + ',';
+                        }
+                    }
+                }
+                RoundList = RoundList.removeEnd(',');
+                acc.Tracxn_Sync__Tracxn_Latest_Funding_investorList__c = RoundList;
+            } else {
+                acc.Tracxn_Sync__Tracxn_Latest_Funding_investorList__c = null;
+            }
+            
+            if (result.ipoInfo != null && result.ipoInfo.ipoList != null && result.ipoInfo.ipoList[0].dates != null) { 
+                if(result.ipoInfo.ipoList[0].dates.day != null && result.ipoInfo.ipoList[0].dates.month != null && result.ipoInfo.ipoList[0].dates.year != null){
+                
+                    integer Day = result.ipoInfo.ipoList[0].dates.day;  
+                    integer month = result.ipoInfo.ipoList[0].dates.month;
+                    integer year = result.ipoInfo.ipoList[0].dates.year;
+                    Date myDate = Date.newInstance(Integer.valueOf(year), Integer.valueOf(month), Integer.valueOf(day));
+                    acc.Tracxn_Sync__Tracxn_IPO_Date__c = Date.valueof(myDate);
+                }
+                
+                
+            } else {
+                acc.Tracxn_Sync__Tracxn_IPO_Date__c = null;
+            }
+            if (result.contactNumberList != null) {
+                for (AccountWrapper.cls_contactNumberList cn : result.contactNumberList) {
+                    if(cn.countryCode!=null && cn.mobile!= null)
+                    {
+                        acc.Tracxn_Sync__Tracxn_Contact_Number_s__c = cn.countryCode + cn.mobile;
+                    }
+                    else 
+                        acc.Tracxn_Sync__Tracxn_Contact_Number_s__c = null;
+                }
+            }
+            if (result.acquirerInfo != null && result.acquirerInfo.acquirerList != null) {
+                for (AccountWrapper.cls_acquirerList aqd : result.acquirerInfo.acquirerList) {
+                    if (aqd != null && aqd.dates != null) {
+                        Date myDate = Date.newInstance(Integer.valueOf(aqd.dates.year), Integer.valueOf(aqd.dates.month), Integer.valueOf(aqd.dates.day));
+                        acc.Tracxn_Sync__Tracxn_Acquired_Date__c = myDate;//.format('MM/dd/yyyy');//Date d = dt.format();
+                    }
+                }
+            } else {
+                acc.Tracxn_Sync__Tracxn_Acquired_Date__c = null;
+            }
+            if (result.acquirerInfo != null && result.acquirerInfo.acquirerList != null) {
+                for (AccountWrapper.cls_acquirerList aqd : result.acquirerInfo.acquirerList) {
+                    if(aqd.type != null){
+                        acc.Tracxn_Sync__Tracxn_Acquisition_Type__c = aqd.type;
+                    }
+                }
+            } else {
+                acc.Tracxn_Sync__Tracxn_Acquisition_Type__c = null;
+            }
+            if (result.latestValuation != null && result.latestValuation.amount != null) {
+                acc.Tracxn_Sync__Tracxn_Latest_Valuation_USD__c = result.latestValuation.amount.value;
+            } else {
+                acc.Tracxn_Sync__Tracxn_Latest_Valuation_USD__c = null;
+            }
+            if (result.latestDomainRevenueMultiple != null && result.latestDomainRevenueMultiple.value != null) {
+                
+                acc.Tracxn_Sync__Tracxn_Latest_Revenue_Multiple__c = string.valueof(result.latestDomainRevenueMultiple.value);
+                
+            } else {
+                acc.Tracxn_Sync__Tracxn_Latest_Revenue_Multiple__c = null;
+            }
+            if (result.tracxnScore != null) {
+                acc.Tracxn_Sync__Tracxn_Score__c = result.tracxnScore;
+            } else {
+                acc.Tracxn_Sync__Tracxn_Score__c = null;
+            }
+            if (result.stageDetails != null) {
+                String stageDetails = '';
+                if (result.stageDetails.isDeadpooled == True) {
+                    stageDetails += ',Deadpooled';
+                }
+                if (result.stageDetails.isAcquired == True) {
+                    stageDetails += ',Acquired';
+                }
+                if (result.stageDetails.isFunded == True) {
+                    stageDetails += ',Funded';
+                }
+                if (result.stageDetails.isIncorporated == True) {
+                    stageDetails += ',Incorporated';
+                }
+                stageDetails = stageDetails.removeStart(',');
+                //acc.Tracxn_Sync__Tracxn_Company_Stage__c = stageDetails;
+            } else {
+                //acc.Tracxn_Sync__Tracxn_Company_Stage__c = null;
+            }
+        }
+        if (String.isNotBlank(publicId) && acc.Tracxn_Sync__Manual_Override_Value__c == null) {
+            acc.Tracxn_Sync__Manual_Override_Value__c = publicId;
+        }
+        return acc;
+        //} catch (Exception ex) {
+        //System.debug('Exception->' + ex.getMessage() + ' in line->' + ex.getLineNumber() + ' cause->' + ex.getCause());
+        //return null;
+        //}
+    }
+    
+    public static AccountWrapper parse(String json) {
+        return (AccountWrapper) System.JSON.deserialize(json, AccountWrapper.class);
+    }
+    
+    public static Account blankAccount(string accId) {
+        Account acc = new Account();
+        //List<Account> Acclist = Database.query(acc);
+        acc.Id = accId;
+        acc.Tracxn_Sync__Tracxn_Acquired_Date__c = null;
+        acc.Tracxn_Sync__Tracxn_Acquisition_Type__c = null;
+        acc.Tracxn_Sync__Tracxn_Angel_Investors__c = null;
+        //acc.Tracxn_Sync__Tracxn_Board_Members__c = null;
+        acc.Tracxn_Sync__Tracxn_Business_Models__c = null;
+        acc.Tracxn_Sync__Tracxn_City__c = null;
+        acc.Tracxn_Sync__Tracxn_Company_Domain__c = null;
+        acc.Tracxn_Sync__Tracxn_Company_Name__c = null;
+        //acc.Tracxn_Sync__Tracxn_Company_Stage__c = null;
+        acc.Tracxn_Sync__Tracxn_Contact_Number_s__c = null;
+        acc.Tracxn_Sync__Tracxn_Country__c = null;
+        acc.Tracxn_Sync__Tracxn_Email_ID_s__c = null;
+        acc.Tracxn_Sync__Tracxn_Facebook_Page__c = null;
+        acc.Tracxn_Sync__Tracxn_Facilitators__c = null;
+        acc.Tracxn_Sync__Tracxn_Founded_Year__c = null;
+        acc.Tracxn_Sync__Tracxn_Institutional_Investors__c = null;
+        acc.Tracxn_Sync__Tracxn_IPO_Date__c = null;
+        acc.Tracxn_Sync__Tracxn_Latest_Funding_amount__c = null;
+        acc.Tracxn_Sync__Tracxn_Latest_Funding_date__c = null;
+        acc.Tracxn_Sync__Tracxn_Latest_Funding_investorList__c = null;
+        acc.Tracxn_Sync__Tracxn_Latest_Funding_Round_name__c = null;
+        acc.Tracxn_Sync__Tracxn_Latest_News__c = null;
+        acc.Tracxn_Sync__Tracxn_LinkedIn_Page__c = null;
+        acc.Tracxn_Sync__Tracxn_Long_Description__c = null;
+        acc.Tracxn_Sync__Tracxn_Part_Of__c = null;
+        acc.Tracxn_Sync__Tracxn_Short_Description__c = null;
+        acc.Tracxn_Sync__Tracxn_Stage__c = null;
+        acc.Tracxn_Sync__Tracxn_State__c = null;
+        acc.Tracxn_Sync__Tracxn_Stock_Ticker__c = null;
+        acc.Tracxn_Sync__Tracxn_Twitter_Handle__c = null;
+        acc.Tracxn_Sync__Tracxn_URL__c = null;
+        return acc;
+        
+    }
+    
+    public static List<contact> contactMapDetails(List<AccountWrapper.cls_employeeList> empList, Map<String, Contact> contactEmailMap, Map<String, Contact> contactNameMap, String accId) {
+        try {
+            system.debug('empList >> '+empList);
+            system.debug('contactEmailMap >> '+contactEmailMap);
+            system.debug('contactNameMap >> '+contactNameMap);
+            List<contact> conlist = new list<contact>();
+            system.debug('empList >>'+empList);
+            if (empList != null) {
+                for (AccountWrapper.cls_employeeList elist : empList) {
+                    contact con = new contact();
+                    con.AccountId = accId;
+                    if (elist != null && elist.name != null) {
+                        con.Tracxn_Sync__Traxcn_Name__c = elist.name;
+                    } else {
+                        con.Tracxn_Sync__Traxcn_Name__c = null;
+                    }
+                    if (elist != null && elist.id != null) {
+                        con.Tracxn_Sync__Traxcn_ID__c = elist.id;
+                    } else {
+                        con.Tracxn_Sync__Traxcn_ID__c = null;
+                    }
+                    if (elist != null && elist.designation != null) {
+                        con.Tracxn_Sync__Traxcn_Designation__c = elist.designation;
+                    } else {
+                        con.Tracxn_Sync__Traxcn_Designation__c = null;
+                    }
+                    if (elist != null && elist.emailInfo != null && elist.emailInfo.primaryEmail != null) {
+                        con.Tracxn_Sync__Traxcn_Email_ID__c = elist.emailInfo.primaryEmail;
+                    } else {
+                        con.Tracxn_Sync__Traxcn_Email_ID__c = null;
+                    }
+                    //TODO: Missing the field mapping for email List also where to save on contact or on account created field (Tracxn_Sync__Tracxn_OtherEmailList__c) start
+                    if (elist != null && elist.emailInfo != null && elist.emailInfo.emailList != null && elist.emailInfo.emailList.size() > 0) {
+                        String otherEmail = '';
+                        for (String emailIter : elist.emailInfo.emailList) {
+                            otherEmail = otherEmail + emailIter + ', ';
+                        }
+                        otherEmail = otherEmail.removeEnd(',');
+                        con.Tracxn_Sync__Tracxn_OtherEmailList__c = otherEmail; //
+                    } else {
+                        con.Tracxn_Sync__Tracxn_OtherEmailList__c = null;
+                    }
+                    //TODO: Missing the field mapping for email List also where to save on contact or on account created field (Tracxn_Sync__Tracxn_OtherEmailList__c) end
+                    if (elist != null && elist.profileLinks != null && elist.profileLinks.linkedinHandle != null) {
+                        con.Tracxn_Sync__Traxcn_Linkedin_Handle__c = elist.profileLinks.linkedinHandle;
+                    } else {
+                        con.Tracxn_Sync__Traxcn_Linkedin_Handle__c = null;
+                    }
+                    if (elist != null && elist.profileLinks != null && elist.profileLinks.twitter != null) {
+                        con.Tracxn_Sync__Traxcn_Twitter_Handle__c = elist.profileLinks.twitter;
+                    } else {
+                        con.Tracxn_Sync__Traxcn_Twitter_Handle__c = null;
+                    }
+                    if (elist != null && elist.profileLinks != null && elist.profileLinks.twitterHandle != null) {
+                        con.Tracxn_Sync__Traxcn_Twitter_Handle__c = elist.profileLinks.twitterHandle;
+                    } else {
+                        con.Tracxn_Sync__Traxcn_Twitter_Handle__c = null;
+                    }
+                    if (elist != null && elist.shortsBio != null) {
+                        con.Tracxn_Sync__Traxcn_Bio__c = elist.shortsBio;
+                    } else {
+                        con.Tracxn_Sync__Traxcn_Bio__c = null;
+                    }
+                    String email = '';
+                    if (elist != null && elist.emailInfo != null) {
+                        if (elist.emailInfo.primaryEmail != null) {
+                            email = elist.emailInfo.primaryEmail;
+                        }
+                    }
+                    
+                    Boolean noEmail = false;
+                    if (String.isNotBlank(email)) {
+                        if (contactEmailMap != null) {
+                            if (contactEmailMap.containskey(email.toLowerCase() + '-' + accId)) {
+                                con.Id = contactEmailMap.get(email.toLowerCase() + '-' + accId).Id;
+                                noEmail = true;
+                            }
+                        }
+                    }
+                    if (!noEmail) {
+                        if (contactNameMap != null) {
+                            if (contactNameMap.containskey(elist.name.toLowerCase() + '-' + accId)) {
+                                con.Id = contactNameMap.get(elist.name.toLowerCase() + '-' + accId).Id;
+                            }
+                        }
+                    }
+                    
+                    if (con.Id == null) {
+                        if (elist.name.split(' ').size() == 2) {
+                            if (con.FirstName == null) {
+                                con.FirstName = elist.name.split(' ')[0];
+                            }
+                            if (con.LastName == null) {
+                                con.LastName = elist.name.split(' ')[1];
+                            }
+                        } else if (elist.name.split(' ').size() == 1) {
+                            con.LastName = elist.name;
+                        } else if (elist.name.split(' ').size() > 2) {
+                            String[] words = elist.name.split('\\s');
+                            String firstName = '';
+                            for (Integer i = 0; i < words.size() - 1; i++) {
+                                firstName = firstName + ' ' + words[i];
+                            }
+                            if (con.FirstName == null) {
+                                con.FirstName = firstName;
+                            }
+                            if (con.LastName == null) {
+                                con.LastName = words[words.size() - 1];
+                            }
+                            
+                        }
+                    }
+                    if (elist != null && elist.id != null) {
+                        con.Traxcn_ID__c = elist.id;
+                    }
+                    conlist.add(con);
+                }
+            }
+            system.debug('conlist .>>>'+conlist);
+            return conlist;
+        } catch (Exception ex) {
+            System.debug('Exception->' + ex.getMessage() + ' in line->' + ex.getLineNumber() + ' cause->' + ex.getCause());
+            return null;
+        }
+    }
+    
+    public class apiResponse {
+        @AuraEnabled public string message { get; set; }
+        @AuraEnabled public string apiType { get; set; }
+    }
+    
+    
+}

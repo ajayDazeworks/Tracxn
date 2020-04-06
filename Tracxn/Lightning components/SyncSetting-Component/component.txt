@@ -1,0 +1,303 @@
+<aura:component Controller="SyncSettingsController" implements="force:appHostable,flexipage:availableForAllPageTypes"
+                access="global">
+
+    <!--create a component attribute -->
+    <aura:attribute name="increment" type="integer" default="1"/>
+    <aura:attribute name="jobId" type="string" default="NA"/>
+    <aura:attribute name="Spinner" type="boolean" default="false"/>
+    <aura:attribute name="buttonControl" type="boolean" default="false"/>
+    <aura:attribute name="buttonValue" type="string" default="SYNC NOW"/>
+    <aura:attribute name="accStatus" type="string"/>
+    <aura:attribute name="accId" type="string"/>
+    <aura:attribute name="leadStatus" type="string"/>
+    <aura:attribute name="fromURL" type="String"/>
+    <aura:attribute name="URLPage" type="String"/>
+    <aura:attribute name="variable1" type="boolean" default="false"/>
+    <aura:attribute name="variable2" type="boolean" default="false"/>
+    <aura:attribute name="accJobId" type="string" default=""/>
+    <aura:handler name="init" value="{!this}" action="{!c.doInit}"/>
+    <aura:attribute name="setIntervalId" type="Integer"/>
+    <aura:attribute name="ScheduleType" type="List" default="[
+    {'label': 'Do Not Sync', 'value': 'Do not sync'},                                                         
+    {'label': 'Daily', 'value': 'Daily'},
+    {'label': 'Weekly', 'value': 'Weekly'},
+    {'label': 'Monthly', 'value': 'Monthly'}
+    ]"/>
+
+    <aura:attribute name="ScheduledJobWrapperObject" type="object"/>
+    <aura:attribute name="show" type="String" default="A"/>
+
+    <aura:attribute name="userMessage" type="String"/>
+    <aura:attribute name="showUserMessage" type="Boolean" default="false"/>
+    <aura:attribute name="messageSeverity" type="String" default="Info"/>
+
+    <aura:attribute name="selectedValue" type="String"/>
+    <aura:attribute name="days" type="String[]" default="Monday,Tuesday,Wednesday,Thursday,Friday,Saturday,Sunday"/>
+    <aura:attribute name="dates" type="String[]"
+                    default="1st,2nd,3rd,4th,5th,6th,7th,8th,9th,10th,11th,12th,13th,14th,15th,16th,17th,18th,19th,20th,21st,22nd,23rd,24th,25th,26th,27th,28th,29th,30th,31st"/>
+    <aura:attribute name="time" type="String[]"
+                    default="9:00,10:00,11:00,12:00,1:00,2:00,3:00,4:00,5:00,6:00,7:00,8:00"/>
+    <aura:attribute name="setTime" type="String" default="9:00"/>
+    <aura:attribute name="meridian" type="String[]" default="AM,PM"/>
+    <aura:attribute name="setMeridiem" type="String" default="AM"/>
+    <aura:attribute name="AccountSync" type="Boolean" default="false"/>
+    <aura:attribute name="SelectedTZ" type="String" default=""/>
+    <aura:attribute name="selectedDay" type="String" default="Sunday"/>
+    <aura:attribute name="selectedDate" type="String" default="1st"/>
+    <aura:attribute name="selectedTime" type="String" default=""/>
+    <aura:attribute name="isDaily" type="Boolean" default=""/>
+    <aura:attribute name="isWeekly" type="Boolean" default=""/>
+    <aura:attribute name="isMonthly" type="Boolean" default=""/>
+    <aura:attribute name="optionsSet" type="List" default="[
+                                                        {'label': 'Create new contact in salesforce', 'value': true},
+                                                        {'label': 'Do not create a new contact in Salesforce', 'value': false}
+                                                        ]"/>
+    <aura:attribute name="valueCon" type="boolean" default="false"/>
+    <aura:attribute name="LeadSync" type="Boolean" default="false"/>
+    <aura:if isTrue="{!v.Spinner}">
+        <div aura:id="spinnerId" class="slds-spinner_container">
+            <div class="slds-spinner--brand  slds-spinner slds-spinner--large slds-is-relative" role="alert">
+                <span class="slds-assistive-text">Loading</span>
+                <div class="slds-spinner__dot-a"></div>
+                <div class="slds-spinner__dot-b"></div>
+            </div>
+        </div>
+    </aura:if>
+    <div class="slds-card slds-m-around--small">
+        <div class="slds-page-header">
+            <div class="slds-page-header__row">
+                <div class="slds-page-header__col-title">
+                    <img src="{!$Resource.Traxcnlogo}"/>
+                </div>
+                <div class="slds-media__body">
+                    <div class="slds-page-header__name">
+                        <div class="slds-page-header__name-title">
+                            <h1>
+                                <span class="slds-page-header__title slds-truncate" title="Sync Settings">Sync
+                                    Settings</span>
+                            </h1>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div>
+            <hr/>
+            <div class="slds-p-left--medium slds-p-right--medium setOverflow">
+                <aura:if isTrue="{!v.showUserMessage}">
+                    <ui:message title="" severity="{!v.messageSeverity}" closable="true">
+                    {!v.userMessage}
+                </ui:message>
+                </aura:if>
+                <br/>
+                <h3 class="slds-text-heading_medium">
+                    <ul>Select the objects for which data will be automatically synced with Traxcn</ul>
+                </h3>
+                <div style="overflow:hidden;">
+                    <div>
+                        <lightning:button class="slds-float_right" variant="brand" label="{!v.buttonValue}"
+                                          title="Brand action"
+                                          onclick="{! c.handleClick }" disabled="{! v.buttonControl }"/>
+                    </div>
+                </div>
+                <br/>
+                <div>
+                    <div class="slds-box slds-box_small">
+                        <p>
+                            <fieldset class="slds-form-element">
+                                <div class="slds-form-element__control">
+                                    <!--                                    <div class="slds-checkbox">-->
+                                    <!--<input type="checkbox" name="options" id="checkbox-unique-id-79"
+                                           value="checkbox-unique-id-79" disabled=""/>-->
+                                    <!--<label class="slds-checkbox__label" for="checkbox-unique-id-79">-->
+                                    <div class="slds-grid slds-gutters">
+                                        <div class="slds-col slds-size_1-of-3">
+                                            <lightning:input type="checkbox"
+                                                             label="Accounts and Contacts"
+                                                             class="slds-clearfix"
+                                                             name="options" aura:id="accsync"
+                                                             checked="{!v.AccountSync}"/>
+                                        </div>
+                                        <div class="slds-col slds-size_1-of-3">
+                                                            <span class="slds-text-heading_small"
+                                                                  style="color:green;">{!v.accStatus}</span>
+                                        </div>
+
+                                        <div class="slds-col slds-size_1-of-3">
+                                                            <span class="slds-text-heading_small">
+                                                                <aura:if isTrue="{!v.variable1}">
+                                                                    <ui:outputURL aura:id="oURL" label="Sync Results"
+                                                                                  click="{!c.Vfpageurl}"/>
+                                                                    <!-- <lightning:button variant="brand" label="Sync Results" title="Account Results" onclick="{!c.Vfpageurl }" /> -->
+                                                                </aura:if>
+                                                            </span>
+                                        </div>
+                                    </div>
+                                    <!--<span class="slds-checkbox_faux"></span>-->
+                                    <span class="slds-text-heading_small">
+                        <p class="slds-m-left--large">Accounts are synced with companies
+                            in Traxcn by comparing
+                            the
+                            company website <br/>Contacts are synced with company
+                            Founders
+                            and/or CEOs on Traxcn</p>
+                        </span>
+                        <!-- </label>-->
+                        <!--                                    </div>-->
+                        <br/>
+                        <div class="slds-checkbox">
+                            <input type="checkbox" name="options" id="checkbox-unique-id-80"
+                                   value="checkbox-unique-id-80" disabled=""/>
+                            <label class="slds-checkbox__label" for="checkbox-unique-id-80">
+                                                    <span class="slds-text-heading_small">
+                                                        <p> If a new Founder/CEO is found on the Traxcn database:</p>
+                                                    </span>
+                                <lightning:radioGroup name="radioGroup1" label=""
+                                                      options="{! v.optionsSet }" value="{! v.valueCon }"
+                                                      type="radio"/>
+                            </label>
+                        </div>
+                        <br/>
+                        <div class="slds-grid slds-gutters">
+                            <div class="slds-col slds-size_1-of-3 ">
+                                <lightning:input type="checkbox" label="Leads" class="slds-clearfix"
+                                                 name="leadoptions" aura:id="leadsync" checked="{!v.LeadSync}"/>
+                                <p class="slds-m-left--large">Leads
+                                    are synced with companies and Founders and/or CEOs of companies
+                                    in
+                                    Traxcn.</p>
+                            </div>
+                            <div class="slds-col slds-size_1-of-3">
+                                                    <span class="slds-text-heading_small"
+                                                          style="color:green;">{!v.leadStatus}</span>
+                            </div>
+                            <div class="slds-col slds-size_2-of-3">
+                                                    <span class="slds-text-heading_small">
+                                                        <aura:if isTrue="{!v.variable2}">
+
+                                                            <ui:outputURL aura:id="oURL" label="Sync Results"
+                                                                          click="{!c.Vfpageurllead}"/>
+                                                            <!-- <lightning:button variant="brand" label="Sync Results" title="Account Results" onclick="{!c.Vfpageurl }" /> -->
+                                                        </aura:if>
+                                                    </span>
+                            </div>
+                        </div>
+                    </div>
+                    </fieldset>
+                    </p>
+                </div>
+            </div>
+            <div class="slds-box">
+                <b>Frequency</b><br/>
+                <lightning:radioGroup
+                        class="customRadioCls slds-p-top_x-small slds-p-bottom_x-small setWidth riskAppetiteColorCSS"
+                        name="radioGroup2"
+                        style="display:inline-block !important;width:150px;" label="Frequency" variant="label-hidden"
+                        options="{! v.ScheduleType }" value="{! v.selectedValue }"
+                        type="button"
+                        onchange="{! c.setScheduleType }"/>
+                <br/>
+
+                <!-- Daily Section -->
+                <aura:if isTrue="{!v.isDaily == TRUE}">
+                    <lightning:layout multipleRows="false">
+                        <lightning:layoutItem size="2" class="slds-p-right_xx-small">
+                            <lightning:select name="select" label="" value="{!v.setTime}" variant="label-hidden">
+                                <aura:iteration items="{!v.time}" var="time">
+                                    <option text="{!time}"></option>
+                                </aura:iteration>
+                            </lightning:select>
+                        </lightning:layoutItem>
+                        <lightning:layoutItem size="2" class="slds-p-left_xx-small">
+                            <lightning:select name="select" label="" value="{!v.setMeridiem}" variant="label-hidden">
+                                <aura:iteration items="{!v.meridian}" var="meridian">
+                                    <option text="{!meridian}"></option>
+                                </aura:iteration>
+                            </lightning:select>
+                        </lightning:layoutItem>
+                        <lightning:layoutItem size="8"></lightning:layoutItem>
+                    </lightning:layout>
+                </aura:if>
+
+                <!-- Weekly Section -->
+                <aura:if isTrue="{!v.isWeekly == TRUE}">
+                    <lightning:layout multipleRows="false">
+                        <lightning:layoutItem size="1">
+                            <div class="slds-p-left_medium slds-p-top_small" style="font-size: initial;">Every</div>
+                        </lightning:layoutItem>
+                        <lightning:layoutItem size="2" class="slds-p-right_xx-small">
+                            <lightning:select name="select" label="Every" value="{!v.selectedDay}"
+                                              variant="label-hidden">
+                                <aura:iteration items="{!v.days}" var="day">
+                                    <option text="{!day}"></option>
+                                </aura:iteration>
+                            </lightning:select>
+                        </lightning:layoutItem>
+                        <lightning:layoutItem size="2" class="slds-p-right_xx-small slds-p-left_xx-small">
+                            <lightning:select name="select" label="" value="{!v.setTime}" variant="label-hidden">
+                                <aura:iteration items="{!v.time}" var="time">
+                                    <option text="{!time}"></option>
+                                </aura:iteration>
+                            </lightning:select>
+                        </lightning:layoutItem>
+                        <lightning:layoutItem size="2" class="slds-p-left_xx-small">
+                            <lightning:select name="select" label="" value="{!v.setMeridiem}" variant="label-hidden">
+                                <aura:iteration items="{!v.meridian}" var="meridian">
+                                    <option text="{!meridian}"></option>
+                                </aura:iteration>
+                            </lightning:select>
+                        </lightning:layoutItem>
+                        <lightning:layoutItem size="5"></lightning:layoutItem>
+                    </lightning:layout>
+                </aura:if>
+
+                <!-- Monthly Section -->
+                <aura:if isTrue="{!v.isMonthly == TRUE}">
+                    <lightning:layout multipleRows="false">
+                        <lightning:layoutItem size="2">
+                            <lightning:select name="select" label="" value="{!v.selectedDate}" variant="label-hidden">
+                                <aura:iteration items="{!v.dates}" var="date">
+                                    <option text="{!date}"></option>
+                                </aura:iteration>
+                            </lightning:select>
+                        </lightning:layoutItem>
+                        <lightning:layoutItem size="2">
+                            <div class="slds-p-left_medium slds-p-top_small" style="font-size: initial;">Day of every
+                                month at
+                            </div>
+                        </lightning:layoutItem>
+                        <lightning:layoutItem size="2" class="slds-p-right_xx-small">
+                            <lightning:select name="select" label="" value="{!v.setTime}" variant="label-hidden">
+                                <aura:iteration items="{!v.time}" var="time">
+                                    <option text="{!time}"></option>
+                                </aura:iteration>
+                            </lightning:select>
+                        </lightning:layoutItem>
+                        <lightning:layoutItem size="2" class="slds-p-left_xx-small">
+                            <lightning:select name="select" label="" value="{!v.setMeridiem}" variant="label-hidden">
+                                <aura:iteration items="{!v.meridian}" var="meridian">
+                                    <option text="{!meridian}"></option>
+                                </aura:iteration>
+                            </lightning:select>
+                        </lightning:layoutItem>
+                        <lightning:layoutItem size="4"></lightning:layoutItem>
+                    </lightning:layout>
+                </aura:if>
+
+            </div>
+            <br/>
+            <div class="slds-clearfix">
+                <div style="overflow:hidden;">
+                    <div>
+                        
+                        <lightning:button class="slds-float_right" variant="brand" label="SAVE" title="Brand action"
+                                          onclick="{!c.scheduleApexSync}"/>
+                    </div>
+                </div>
+                <br/>
+            </div>
+        </div>
+    </div>
+    </div>
+</aura:component>

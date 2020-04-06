@@ -1,0 +1,238 @@
+({
+    pollApex: function (component, event, helper) {
+        this.callApexMethod(component, helper);
+        let interval = window.setInterval(
+            $A.getCallback(() => this.callApexMethod(component, helper)),
+            9000);
+        component.set("v.setIntervalId", interval);
+    },
+    
+    doInitHelper: function (component, event, helper) {
+        try {
+            let action = component.get("c.getScheduledJobInfo");
+            action.setCallback(this, function (resp) {
+                let state = resp.getState();
+                if (state === "SUCCESS") {
+                    //component.set("v.ScheduledJobWrapperObject", resp.getReturnValue());
+                    helper.mapUserPreferenceSettings(component, event, helper, resp.getReturnValue());
+                    // if (resp.getReturnValue().dailyJobList.length > 0 || resp.getReturnValue().weeklyJobList.length > 0 || resp.getReturnValue().monthlyJobList.length > 0) {
+                    //     component.set("v.show", "C");
+                    // }
+                } else if (state === "ERROR") {
+                    let errors = resp.getError();
+                    if (errors) {
+                        if (errors[0] && errors[0].message) {
+                            console.error("Error message: " + errors[0].message);
+                        }
+                    } else {
+                        console.error("Unknown error");
+                    }
+                }
+            });
+            $A.enqueueAction(action);
+        } catch (e) {
+            console.error('Exception occurred in do init. \n Message ::', e.message);
+        }
+    },
+    
+    mapUserPreferenceSettings: function (component, event, helper, payloadFromApex) {
+        try {
+            if (!$A.util.isUndefinedOrNull(payloadFromApex.userPreferencesSetting)) {
+                console.log(payloadFromApex);
+                component.set('v.AccountSync', payloadFromApex.userPreferencesSetting.Tracxn_Sync__isAccount__c);
+                component.set('v.valueCon', payloadFromApex.userPreferencesSetting.Tracxn_Sync__isContact__c);
+                component.set('v.LeadSync', payloadFromApex.userPreferencesSetting.Tracxn_Sync__isLead__c);
+                component.set('v.selectedDay', payloadFromApex.userPreferencesSetting.Tracxn_Sync__Selected_Day__c);
+                component.set('v.selectedDate', payloadFromApex.userPreferencesSetting.Tracxn_Sync__Selected_Date__c);
+                //component.set('v.selectedTime', payloadFromApex.userPreferencesSetting.Tracxn_Sync__Selected_Time__c);
+                component.set('v.setTime', payloadFromApex.userPreferencesSetting.Tracxn_Sync__Selected_Time__c);
+                component.set('v.setMeridiem', payloadFromApex.userPreferencesSetting.Tracxn_Sync__Meridiem__c);
+                
+                if (payloadFromApex.userPreferencesSetting.Tracxn_Sync__isDaily__c) {
+                    component.set("v.isDaily", true);
+                    component.set("v.selectedValue", 'Daily');
+                    component.set("v.isWeekly", false);
+                    component.set("v.isMonthly", false);
+                } else if (payloadFromApex.userPreferencesSetting.Tracxn_Sync__isWeekly__c) {
+                    component.set("v.isDaily", false);
+                    component.set("v.isWeekly", true);
+                    component.set("v.selectedValue", 'Weekly');
+                    component.set("v.isMonthly", false);
+                } else if (payloadFromApex.userPreferencesSetting.Tracxn_Sync__isMonthly__c) {
+                    component.set("v.isDaily", false);
+                    component.set("v.isWeekly", false);
+                    component.set("v.selectedValue", 'Monthly');
+                    component.set("v.isMonthly", true);
+                }else{
+                    component.set("v.isDaily", false);
+                    component.set("v.isWeekly", false);
+                    component.set("v.selectedValue", 'Do not sync');
+                    component.set("v.isMonthly", false);
+                }
+            }else{
+                component.set("v.selectedValue", 'Do not sync');
+            }
+            
+        } catch (e) {
+            component.set('v.userMessage','Unable to map the previously saved mapping.');
+            component.set('v.showUserMessage',true);
+            component.set('v.messageSeverity','error');
+            console.error('Exception occurred while mapping the fields', e.message);
+        }
+        
+    },
+    
+    /**
+     * Method to schedule the apex jobs
+     * @param component
+     * @param event
+     * @param helper
+     */
+    scheduleApexSync_Helper: function (component, event, helper) {
+        let isAccount = component.get('v.AccountSync');
+        let isContact = component.get('v.valueCon');
+        let isLead = component.get('v.LeadSync');
+        let SelectedTZ = component.get('v.SelectedTZ');
+        let isDaily = component.get('v.isDaily');
+        let isWeekly = component.get('v.isWeekly');
+        let isMonthly = component.get('v.isMonthly');
+        let selectedDay = component.get('v.selectedDay');
+        let selectedDate = component.get('v.selectedDate');
+        let selectedTime = component.get('v.selectedTime');
+        let setTime = component.get("v.setTime");
+        let setMeridiem = component.get("v.setMeridiem");
+        console.log('selectedDate-------'+selectedDate);
+        let action = component.get("c.scheduleSync");
+        let obj = {
+            isAccount: isAccount, SelectedTZ: SelectedTZ, isDaily: isDaily,
+            isWeekly: isWeekly, isMonthly: isMonthly, selectedDay: selectedDay,selectedDate: selectedDate,
+            selectedTime: selectedTime, setTime: setTime, setMeridiem: setMeridiem, isContact: isContact, isLead: isLead
+        };
+        console.log('obj ==> ',obj);
+        console.log('obj jss ==> ',JSON.stringify(obj));
+        action.setParams(obj);
+        action.setCallback(this, function (response) {
+            let state = response.getState();
+            if (state === "SUCCESS" && response.getReturnValue()) {
+                component.set('v.userMessage','Sync Settings updated successfully.');
+                component.set('v.showUserMessage',true);
+                component.set('v.messageSeverity','confirm');
+                helper.doInitHelper(component, event, helper);
+            } else if (state === "ERROR") {
+                component.set('v.userMessage','Unable to update Sync Settings.');
+                component.set('v.showUserMessage',true);
+                component.set('v.messageSeverity','error');
+                let errors = response.getError();
+                if (errors) {
+                    if (errors[0] && errors[0].message) {
+                        console.error("Error message: ", errors[0].message);
+                    }
+                } else {
+                    console.error("Unknown error");
+                }
+            }
+        });
+        $A.enqueueAction(action);
+    },
+    
+    handleResponse: function (response, component) {
+        let retVal = response.getReturnValue();
+        let isAccount = component.get('v.AccountSync');
+        let isLead = component.get('v.LeadSync');
+        let vfleadpage = "/apex/Tracxn_Sync__BulkLeadSyncResult";
+        let vfurpage = "/apex/Tracxn_Sync__BulkAccountSyncResult";
+        if (isAccount) {
+            component.set("v.accStatus", retVal);
+            if (retVal === 'Completed') {
+                component.set("v.letiable1", 'true');
+                component.set("v.fromURL", vfurpage);
+            }
+        }
+        if (isLead) {
+            component.set("v.leadStatus", retVal);
+            if (retVal === 'Completed') {
+                component.set("v.letiable2", 'true');
+                component.set("v.fromURL", vfleadpage);
+            }
+        }
+    },
+    
+    /*callApexMethod: function (component, helper) {
+        let action = component.get("c.getBatchStatus");
+        action.setParams({jobId: component.get('v.accJobId')});
+        action.setCallback(this, function (response) {
+            let state = response.getState();
+            if (state === "SUCCESS") {
+                if (response.getReturnValue() === 'Completed')
+                    window.clearInterval(component.get("v.setIntervalId"));
+                this.handleResponse(response, component);
+            }
+        });
+        $A.enqueueAction(action);
+    }*/
+    
+    callApexMethod: function (component, helper) {
+        let action = component.get("c.getBatchStatus");
+        let action2 = component.get("c.getBatchStatus2");
+        action.setParams({jobId: component.get('v.accJobId')});
+        /*action.setCallback(this, function (response) {
+            let state = response.getState();
+            if (state === "SUCCESS") {
+                if (response.getReturnValue() === 'Completed')
+                    window.clearInterval(component.get("v.setIntervalId"));
+                this.handleResponse(response, component);
+            }
+        });*/
+        action2.setCallback(this, function (response) {
+            let state = response.getState();
+            if (state === "SUCCESS") {
+                if (response.getReturnValue() === null) {
+                    window.clearInterval(component.get("v.setIntervalId"));
+                    component.set("v.buttonControl",false);
+                    if(component.get("v.AccountSync") === true) {
+                        component.set("v.accStatus",'Completed');                    
+                    } 
+                    if(component.get("v.LeadSync") === true) {
+                        component.set("v.leadStatus",'Completed');                    
+                    }                    
+                    component.set("v.buttonValue",'SYNC NOW');
+                    component.set("v.jobId",'NA');
+                    component.set("v.increment",1);  
+                    console.log('response.getReturnValue()-->'+response.getReturnValue());
+                } else {
+                    component.set("v.buttonControl",true);
+                    console.log('response.getReturnValue()-->'+response.getReturnValue());                                        
+                    if(component.get("v.jobId") !== response.getReturnValue()) {
+                        component.set("v.jobId",response.getReturnValue());  
+                        let num = component.get("v.increment");
+                        component.set("v.buttonValue",'Processing ');
+                        if(component.get("v.AccountSync") === true) {
+                            component.set("v.accStatus",'Processing ');
+                        } 
+                        if(component.get("v.LeadSync") === true) {
+                            component.set("v.leadStatus",'Processing ');
+                        }  
+                        num = num + 1;
+                        component.set("v.increment",num);  
+                    }
+                }                    
+            }
+        });
+        //$A.enqueueAction(action);
+        $A.enqueueAction(action2);
+    },
+    abortScheduleJob : function (component,event, helper) {
+    	var action = component.get("c.abortJobSchedule");
+        action.setCallback(this, function (response){
+            let state = response.getState();
+            if (state === "SUCCESS") {
+                console.log('job state');
+                component.set('v.userMessage',response.getReturnValue());
+                component.set('v.showUserMessage',true);
+                component.set('v.messageSeverity','confirm');
+            }
+            
+        });
+        $A.enqueueAction(action);
+    }
+})

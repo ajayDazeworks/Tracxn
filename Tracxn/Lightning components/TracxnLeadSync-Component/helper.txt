@@ -1,0 +1,51 @@
+({
+    getResponse: function (component, publicId) {
+        let action = component.get("c.getcalloutResponseContents");
+        // set the url parameter for getCalloutResponseContents method (to use as endPoint) 
+        console.log('calling');
+        action.setParams({
+            recordid: component.get('v.recordId'),
+            "publicId": publicId,
+
+        });
+        action.setCallback(this, function (response) {
+            let state = response.getState();
+            let returnedValues = response.getReturnValue();
+            console.log('State', state);
+            console.log('returnedValues', returnedValues);
+            if (state === "SUCCESS") {
+                console.log('response.getReturnValue', returnedValues);
+                component.set("v.isOpen", false);
+                component.set("v.NoResult", false);
+                if (returnedValues.message.includes("Success")) {
+                    this.displayMessage('Success', 'success', 'Lead details have been successfully synced with Tracxn');
+                    $A.get("e.force:closeQuickAction").fire();
+                    $A.get('e.force:refreshView').fire();
+                    if (returnedValues.message.includes("Error")) {
+                        this.displayMessage('Server', 'error', 'Not able to connect');
+                        $A.get("e.force:closeQuickAction").fire();
+                    }
+                    component.set("v.spinner", true);
+                    setTimeout(function () {
+                        component.set("v.spinner", false);
+                        $A.get('e.force:refreshView').fire();
+                    }, 8000);
+                } else if (returnedValues.message.includes("No Result")) {
+                    component.set("v.NoResult", true);
+                }
+            }
+        });
+        $A.enqueueAction(action);
+    },
+    displayMessage: function (title, type, message) {
+        console.log(type);
+        let toastEvent = $A.get("e.force:showToast");
+        toastEvent.setParams({
+            "title": title,
+            "message": message,
+            "type": type
+        });
+        toastEvent.fire();
+        //$A.get('e.force:refreshView').fire();
+    },
+})

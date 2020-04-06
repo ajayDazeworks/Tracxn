@@ -1,0 +1,143 @@
+/**
+ * Created by ABHISHEK KUMAR SHARM on 04-02-2020.
+ */
+
+global class BulkSyncUp_LeadBatch_WithManualOverride implements Database.Batchable<sObject>, Database.AllowsCallouts, Database.Stateful {
+    global static Map<Id, String> mapofErrors = new Map<Id, String>();
+    global static Map<Id, SObject> IdToSObjectMap = new Map<Id, SObject>();
+    global List<Lead> leads;
+
+    global BulkSyncUp_LeadBatch_WithManualOverride() {
+        mapofErrors = new Map<Id, String>();
+        leads = new List<Lead>();
+        IdToSObjectMap = new Map<Id, SObject>();
+    }
+
+    global Database.QueryLocator start(Database.BatchableContext BC) {
+        string query = 'Select Tracxn_Sync__Bulk_Sync_isSuccess__c,Tracxn_Sync__Manual_Override_Value__c,Name,Email,id,Website, Tracxn_Sync__Tracxn_Company_Domain__c, Tracxn_Sync__Tracxn_PublicID__c,';
+        query += 'Tracxn_Sync__Tracxn_Founded_Year__c, Tracxn_Sync__Tracxn_Facebook_Page__c, Tracxn_Sync__Tracxn_Twitter_Handle__c, Tracxn_Sync__Tracxn_Stage__c,';
+        query += 'Tracxn_Sync__Tracxn_Latest_Funding_investorList__c, Tracxn_Sync__Tracxn_Country__c, Tracxn_Sync__Tracxn_Company_Name__c';
+        query += ' From Lead WHERE Tracxn_Sync__Manual_Override_Value__c != null';
+        return Database.getQueryLocator(query);
+    }
+
+    global void execute(Database.BatchableContext BC, List<Lead> scope) {
+        //Map<String,Lead> WebsiteListMap = new Map<String,Lead>();
+        Map<String, List<Lead>> leadListMap = new Map<String, List<Lead>>();
+        Map<Id,Lead> leadDataMap = new Map<Id,Lead>();
+        for (Lead Le : scope) {
+            leadDataMap.put(le.Id,le);
+            List<Lead> tempList = new List<Lead>();
+            if (leadListMap.containskey(le.Tracxn_Sync__Manual_Override_Value__c)) {
+                tempList = leadListMap.get(le.Tracxn_Sync__Manual_Override_Value__c);
+            }
+            tempList.add(le);
+            leadListMap.put(le.Tracxn_Sync__Manual_Override_Value__c, tempList);
+        }
+
+        scope = new List<Lead>();
+        Lead Le = new Lead();
+
+        string webdomain = '[';
+        for (String S : leadListMap.keySet()) {
+            webdomain += '"' + s + '",';
+        }
+        webdomain = webdomain.removeEnd(',');
+        webdomain += ']';
+        String body = '{"filter":{"id":';
+        body = body + webdomain;
+        body = body + '}}';
+
+        Tracxn_Sync__Accounts_API__c accApi = [select id, Tracxn_Sync__end_point_url__c, Tracxn_Sync__acess_token__c, Tracxn_Sync__Access_Method__c, Tracxn_Sync__Content_Type__c from Tracxn_Sync__Accounts_API__c] ;
+
+        Http http = new Http();
+        HttpRequest request = new HttpRequest();
+        request.setEndpoint(accApi.Tracxn_Sync__End_Point_Url__c);
+        request.setMethod(accApi.Tracxn_Sync__Access_Method__c);
+        request.setHeader('Content-Type', accApi.Tracxn_Sync__Content_Type__c);
+        request.setheader('accessToken', accApi.Tracxn_Sync__Acess_Token__c);
+        request.setBody(body);
+
+        HttpResponse response = http.send(request);
+        system.debug('responsebody ' + response.getBody());
+        if (response.getStatusCode() == 200) {
+            String responsebody = response.getBody();
+            system.debug('responsebodylead ' + responsebody);
+            
+            AccountWrapper bsw = new AccountWrapper();
+            String bodyAfterReplace = AccountWrapper.replaceKeywordStrings(responsebody);
+            bsw = (AccountWrapper) JSON.deserialize(bodyAfterReplace, AccountWrapper.class);
+            leads.addAll(updateLeadDetials(bsw, leadListMap, false,leadDataMap));
+
+        }
+
+    }
+    public static List<Lead> updateLeadDetials(AccountWrapper wrapper, Map<String, List<Lead>> leadListMap, Boolean isDomain,Map<Id,Lead> leadDataMap) {
+        try{
+            List<Lead> updateLeadList = new List<Lead>();
+            List<Lead> updateLeadLst = new List<Lead>();
+            if (wrapper.result != null) {
+                for (AccountWrapper.cls_result result : wrapper.result) {
+                    String key = '';
+                    if (isDomain) {
+                        key = result.domain;
+                    } else {
+                        key = result.id;
+                    }
+                    if (leadListMap.containskey(key)) {
+                        if (result.domain != null) {
+                            for (Lead led : leadListMap.get(key)) {
+                                updateLeadList.add(HttpCallOut_LeadSync.setleadDetails(result, led));
+                            }
+                        }
+                    }
+                }
+            }
+            if (updateLeadList.size() > 0) {
+                List<Database.SaveResult> resultlist = Database.update(updateLeadList, false);
+                
+                for (Database.SaveResult res : resultlist) {
+                    if (res.isSuccess()) {
+                        if (res != null && res.getId() != null) {
+                            if(leadDataMap.containskey(res.getId())){
+                                Lead led = new Lead();
+                                led = leadDataMap.get(res.getId());
+                                led.Id = res.getId();
+                                led.Bulk_Sync_isSuccess__c = TRUE;
+                                updateLeadLst.add(led);
+                            }
+                        }
+                    } else {
+                        if (res != null && res.getId() != null) {
+                            if(leadDataMap.containskey(res.getId())){
+                                Lead led = new Lead();
+                                led = leadDataMap.get(res.getId());
+                                led.Id = res.getId();
+                                led.Bulk_Sync_isSuccess__c = FALSE;
+                                updateLeadLst.add(led);
+                            }
+                        }
+                    }
+                }
+                if (updateLeadLst.size() > 0)
+                    update updateLeadLst;
+            }
+            return updateLeadLst;
+        }catch(exception ex){
+            System.debug('Exception->'+ex.getMessage()+' in line->'+ex.getLineNumber()+' cause->'+ex.getCause());
+        }
+        return null;
+    }
+
+    global void finish(Database.BatchableContext BC) {
+        List<Tracxn_Sync__Sync_Settings_Status__c> batchStatusObject = [Select Id, Tracxn_Sync__Job_Id__c From Tracxn_Sync__Sync_Settings_Status__c Limit 1];
+        AccountWrapper.insertLog('Lead','0','0','Lead Manual Bulk Batch Finished',''+leads.size());
+        sendResultInCSV.sendLeadDataAsCSV(leads, 'Bulk Lead Manual Sync Result');
+        if (batchStatusObject.size() > 0) {
+            batchStatusObject[0].Tracxn_Sync__Job_Id__c = null; // Database.executeBatch(new BulkSync_Lead_Competitors(), 1);
+            update batchStatusObject;
+        }
+        
+    }
+
+}

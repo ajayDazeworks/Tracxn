@@ -1,0 +1,50 @@
+.THIS.customRadioCls .slds-form-element__control .slds-radio{
+    display : inline-block !important;
+}
+.THIS.customRadioCls .slds-checkbox{
+    display: inline-block !important;
+}
+.THIS .setOverflow{
+    overflow-x: hidden !important;
+}
+.THIS .setHeading{
+    height: 32px; 
+    color: white; 
+    background: green; 
+    line-height: 30px;
+}
+.THIS.customRadioCls .slds-form-element__control .slds-radio{
+    display : inline-block !important;
+}
+
+.THIS .setWidth .slds-form-element__control .slds-radio_button-group {
+    width: 100% !important;
+}
+
+.THIS .setWidth .slds-form-element__control .slds-radio_button-group .slds-radio_button .slds-radio_button__label {
+    width: 90px !important;
+    text-align: center !important;
+}
+
+.THIS .riskAppetiteColorCSS .slds-radio_button [type=radio]:checked + .slds-radio_button__label {
+    background-color: rgba(33, 52, 216, 0.815) !important;
+    color: white !important;
+}
+
+.THIS .setZIndex {
+    z-index: 9999;
+}
+
+.THIS .hr {
+    display: block;
+    margin: 25px !important;
+    border-top: 1px solid var(--lwc-colorBorder,rgb(221, 219, 218));
+    height: 1px;
+    clear: both;
+}
+        .THIS.Tracxn_SyncSyncSettings .setWidth .slds-form-element__control .slds-radio_button-group .slds-radio_button .slds-radio_button__label{
+            width:117px !important;
+        }
+        .THIS .notsync{
+            margin-left:5px;
+        }
